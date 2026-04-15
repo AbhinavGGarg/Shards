@@ -2,22 +2,43 @@
 
 import { useRef, useEffect, useCallback } from "react";
 import * as d3 from "d3";
-import type { TopologyData, TopologyNode, TopologyEdge } from "@/lib/api";
+import type { TopologyData, TopologyNode } from "@/lib/api";
 import { getRiskColor } from "./RiskScoreBadge";
 
 interface NetworkGraphProps {
   data: TopologyData | null;
   onNodeClick: (node: TopologyNode) => void;
+  onNodeHover?: (node: TopologyNode | null) => void;
   pulsingNodes?: Set<string>;
+  suspiciousNodes?: Set<string>;
+  attackLinkKeys?: Set<string>;
 }
 
 interface SimNode extends d3.SimulationNodeDatum, TopologyNode {}
 interface SimLink extends d3.SimulationLinkDatum<SimNode> {
   source: SimNode | string;
   target: SimNode | string;
+  key: string;
 }
 
-export default function NetworkGraph({ data, onNodeClick, pulsingNodes }: NetworkGraphProps) {
+function edgeKey(a: string, b: string): string {
+  return [a, b].sort().join("::");
+}
+
+function nodeRadius(node: TopologyNode): number {
+  if (node.is_router) return 19;
+  const portCount = Object.keys(node.open_ports || {}).length;
+  return Math.max(9, Math.min(15, 9 + portCount * 1.15));
+}
+
+export default function NetworkGraph({
+  data,
+  onNodeClick,
+  onNodeHover,
+  pulsingNodes,
+  suspiciousNodes,
+  attackLinkKeys,
+}: NetworkGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -28,103 +49,160 @@ export default function NetworkGraph({ data, onNodeClick, pulsingNodes }: Networ
     svg.selectAll("*").remove();
 
     const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight || 500;
-
+    const height = Math.max(500, containerRef.current.clientHeight || 500);
     svg.attr("width", width).attr("height", height);
 
-    // Pulse animation definition
     const defs = svg.append("defs");
-    const pulseFilter = defs.append("filter").attr("id", "pulse-glow");
-    pulseFilter.append("feGaussianBlur").attr("stdDeviation", "3").attr("result", "blur");
-    pulseFilter
+
+    const bgGradient = defs.append("linearGradient").attr("id", "graph-bg").attr("x1", "0%").attr("y1", "0%").attr("x2", "100%").attr("y2", "100%");
+    bgGradient.append("stop").attr("offset", "0%").attr("stop-color", "#0b1321").attr("stop-opacity", 0.95);
+    bgGradient.append("stop").attr("offset", "100%").attr("stop-color", "#070c16").attr("stop-opacity", 1);
+
+    const blur = defs.append("filter").attr("id", "node-glow");
+    blur.append("feGaussianBlur").attr("stdDeviation", "3").attr("result", "blur");
+    blur
       .append("feMerge")
       .selectAll("feMergeNode")
       .data(["blur", "SourceGraphic"])
       .join("feMergeNode")
       .attr("in", (d) => d);
 
-    // Create zoom group
+    svg
+      .append("rect")
+      .attr("width", width)
+      .attr("height", height)
+      .attr("fill", "url(#graph-bg)");
+
     const g = svg.append("g");
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.3, 5])
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.45, 4])
       .on("zoom", (event) => g.attr("transform", event.transform));
     svg.call(zoom);
 
-    // Prepare data
-    const nodes: SimNode[] = data.nodes.map((n) => ({ ...n }));
-    const links: SimLink[] = data.edges.map((e) => ({
-      source: e.source,
-      target: e.target,
+    for (let x = 0; x < width; x += 42) {
+      g.append("line")
+        .attr("x1", x)
+        .attr("x2", x)
+        .attr("y1", 0)
+        .attr("y2", height)
+        .attr("stroke", "rgba(56, 90, 120, 0.08)")
+        .attr("stroke-width", 0.8);
+    }
+
+    for (let y = 0; y < height; y += 42) {
+      g.append("line")
+        .attr("x1", 0)
+        .attr("x2", width)
+        .attr("y1", y)
+        .attr("y2", y)
+        .attr("stroke", "rgba(56, 90, 120, 0.08)")
+        .attr("stroke-width", 0.8);
+    }
+
+    const nodes: SimNode[] = data.nodes.map((node) => ({ ...node }));
+    const links: SimLink[] = data.edges.map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+      key: edgeKey(edge.source, edge.target),
     }));
 
-    // Force simulation
+    const isSuspicious = (node: TopologyNode) =>
+      Boolean(suspiciousNodes?.has(node.id)) || node.risk_score >= 65;
+
     const simulation = d3
       .forceSimulation<SimNode>(nodes)
-      .force("link", d3.forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(120))
-      .force("charge", d3.forceManyBody().strength(-300))
+      .force(
+        "link",
+        d3.forceLink<SimNode, SimLink>(links).id((d) => d.id).distance((link) => {
+          const src = link.source as SimNode;
+          const dst = link.target as SimNode;
+          const hot = attackLinkKeys?.has(edgeKey(src.id, dst.id));
+          return hot ? 110 : 145;
+        })
+      )
+      .force("charge", d3.forceManyBody().strength(-360))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(30));
+      .force("collision", d3.forceCollide<SimNode>().radius((d) => nodeRadius(d) + 18));
 
-    // Draw edges
-    const link = g
-      .append("g")
-      .selectAll("line")
+    const linkLayer = g.append("g");
+    const baseLinks = linkLayer
+      .selectAll<SVGLineElement, SimLink>("line.base")
       .data(links)
       .join("line")
-      .attr("stroke", "var(--bg-border)")
-      .attr("stroke-width", 1)
-      .attr("stroke-opacity", 0.4);
+      .attr("class", (d) => {
+        const hot = attackLinkKeys?.has(d.key);
+        return hot ? "network-link-flow network-link-hot" : "network-link-flow";
+      })
+      .attr("stroke", (d) => (attackLinkKeys?.has(d.key) ? "var(--status-critical)" : "rgba(53, 121, 162, 0.45)"))
+      .attr("stroke-width", (d) => (attackLinkKeys?.has(d.key) ? 2.5 : 1.4))
+      .attr("stroke-opacity", (d) => (attackLinkKeys?.has(d.key) ? 0.9 : 0.55));
 
-    // Draw pulse rings for new devices
-    const pulseRings = g
-      .append("g")
-      .selectAll<SVGCircleElement, SimNode>("circle")
-      .data(nodes.filter((n) => pulsingNodes?.has(n.id)))
+    const nodeLayer = g.append("g");
+
+    const halos = nodeLayer
+      .selectAll<SVGCircleElement, SimNode>("circle.halo")
+      .data(nodes)
       .join("circle")
-      .attr("r", 20)
-      .attr("fill", "none")
-      .attr("stroke", (d) => getRiskColor(d.risk_score))
-      .attr("stroke-width", 2)
-      .attr("stroke-opacity", 0.8)
-      .attr("filter", "url(#pulse-glow)");
+      .attr("class", "node-halo")
+      .attr("r", (d) => nodeRadius(d) + 8)
+      .attr("fill", (d) => (isSuspicious(d) ? "var(--status-critical)" : "var(--status-info)"))
+      .attr("opacity", (d) => (isSuspicious(d) ? 0.18 : 0.11))
+      .attr("filter", "url(#node-glow)");
 
-    // Animate pulse rings
-    function animatePulse() {
+    const pulseTargets = nodes.filter((node) => isSuspicious(node) || Boolean(pulsingNodes?.has(node.id)));
+    const pulseRings = nodeLayer
+      .selectAll<SVGCircleElement, SimNode>("circle.pulse")
+      .data(pulseTargets)
+      .join("circle")
+      .attr("class", "alert-ring")
+      .attr("r", (d) => nodeRadius(d) + 2)
+      .attr("fill", "none")
+      .attr("stroke", (d) => (isSuspicious(d) ? "var(--status-critical)" : "var(--status-info)"))
+      .attr("stroke-width", 1.8)
+      .attr("stroke-opacity", 0.65);
+
+    function animatePulses() {
       pulseRings
-        .attr("r", 10)
-        .attr("stroke-opacity", 0.8)
+        .attr("r", (d) => nodeRadius(d) + 2)
+        .attr("stroke-opacity", 0.72)
         .transition()
         .duration(1500)
         .ease(d3.easeLinear)
-        .attr("r", 30)
+        .attr("r", (d) => nodeRadius(d) + 22)
         .attr("stroke-opacity", 0)
-        .on("end", animatePulse);
+        .on("end", animatePulses);
     }
-    if (pulsingNodes && pulsingNodes.size > 0) {
-      animatePulse();
-    }
+    if (pulseTargets.length > 0) animatePulses();
 
-    // Draw nodes
-    const node = g
-      .append("g")
-      .selectAll<SVGCircleElement, SimNode>("circle")
+    const nodesSelection = nodeLayer
+      .selectAll<SVGCircleElement, SimNode>("circle.node")
       .data(nodes)
       .join("circle")
-      .attr("r", (d) => {
-        if (d.is_router) return 20;
-        const portCount = Object.keys(d.open_ports || {}).length;
-        return Math.max(8, Math.min(16, 8 + portCount * 1.5));
+      .attr("class", "node-core")
+      .attr("r", (d) => nodeRadius(d))
+      .attr("fill", (d) => {
+        if (isSuspicious(d)) return "var(--status-critical)";
+        if (d.is_router) return "var(--status-info)";
+        return getRiskColor(d.risk_score);
       })
-      .attr("fill", (d) => getRiskColor(d.risk_score))
-      .attr("stroke", "var(--bg-deep)")
-      .attr("stroke-width", 2.5)
+      .attr("stroke", "rgba(8, 15, 26, 0.9)")
+      .attr("stroke-width", 2.6)
       .style("cursor", "pointer")
-      .on("click", (_, d) => onNodeClick(d));
+      .on("click", (_, d) => onNodeClick(d))
+      .on("mouseenter", function (_, d) {
+        onNodeHover?.(d);
+        d3.select(this).transition().duration(120).attr("r", nodeRadius(d) + 2.5);
+      })
+      .on("mouseleave", function (_, d) {
+        onNodeHover?.(null);
+        d3.select(this).transition().duration(120).attr("r", nodeRadius(d));
+      });
 
-    // Drag behavior
-    const drag = d3.drag<SVGCircleElement, SimNode>()
+    const drag = d3
+      .drag<SVGCircleElement, SimNode>()
       .on("start", (event, d) => {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
+        if (!event.active) simulation.alphaTarget(0.2).restart();
         d.fx = d.x;
         d.fy = d.y;
       })
@@ -137,42 +215,51 @@ export default function NetworkGraph({ data, onNodeClick, pulsingNodes }: Networ
         d.fx = null;
         d.fy = null;
       });
-    node.call(drag);
+    nodesSelection.call(drag);
 
-    // Labels
-    const labels = g
-      .append("g")
-      .selectAll("text")
+    const labels = nodeLayer
+      .selectAll<SVGTextElement, SimNode>("text")
       .data(nodes)
       .join("text")
       .text((d) => d.hostname || d.ip)
       .attr("font-size", 10)
       .attr("font-family", "var(--font-mono)")
-      .attr("fill", "var(--text-ghost)")
+      .attr("fill", "rgba(175, 194, 212, 0.86)")
       .attr("text-anchor", "middle")
-      .attr("dy", (d) => (d.is_router ? 30 : 24))
+      .attr("dy", (d) => (d.is_router ? 30 : 25))
       .style("pointer-events", "none");
 
-    // Tick update
     simulation.on("tick", () => {
-      link
-        .attr("x1", (d) => (d.source as SimNode).x!)
-        .attr("y1", (d) => (d.source as SimNode).y!)
-        .attr("x2", (d) => (d.target as SimNode).x!)
-        .attr("y2", (d) => (d.target as SimNode).y!);
-      node.attr("cx", (d) => d.x!).attr("cy", (d) => d.y!);
-      labels.attr("x", (d) => d.x!).attr("y", (d) => d.y!);
-      pulseRings.attr("cx", (d) => d.x!).attr("cy", (d) => d.y!);
+      baseLinks
+        .attr("x1", (d) => (d.source as SimNode).x ?? 0)
+        .attr("y1", (d) => (d.source as SimNode).y ?? 0)
+        .attr("x2", (d) => (d.target as SimNode).x ?? 0)
+        .attr("y2", (d) => (d.target as SimNode).y ?? 0);
+
+      halos
+        .attr("cx", (d) => d.x ?? 0)
+        .attr("cy", (d) => d.y ?? 0);
+
+      pulseRings
+        .attr("cx", (d) => d.x ?? 0)
+        .attr("cy", (d) => d.y ?? 0);
+
+      nodesSelection
+        .attr("cx", (d) => d.x ?? 0)
+        .attr("cy", (d) => d.y ?? 0);
+
+      labels
+        .attr("x", (d) => d.x ?? 0)
+        .attr("y", (d) => d.y ?? 0);
     });
 
     return () => simulation.stop();
-  }, [data, onNodeClick, pulsingNodes]);
+  }, [attackLinkKeys, data, onNodeClick, onNodeHover, pulsingNodes, suspiciousNodes]);
 
   useEffect(() => {
     renderGraph();
   }, [renderGraph]);
 
-  // Re-render on resize
   useEffect(() => {
     const handleResize = () => renderGraph();
     window.addEventListener("resize", handleResize);
@@ -181,38 +268,17 @@ export default function NetworkGraph({ data, onNodeClick, pulsingNodes }: Networ
 
   if (!data || data.nodes.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center h-96 rounded-xl"
-        style={{
-          background: "var(--bg-card)",
-          border: "1px solid color-mix(in srgb, var(--bg-border) 30%, transparent)",
-        }}
-      >
-        <p
-          style={{
-            color: "var(--text-ghost)",
-            fontFamily: "var(--font-mono)",
-            fontSize: "12px",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-          }}
-        >
-          No network data — run a scan to map the terrain.
+      <div className="command-panel h-[520px] flex flex-col items-center justify-center gap-4">
+        <div className="w-12 h-12 rounded-full border-2 border-[var(--status-info)] border-t-transparent animate-spin" />
+        <p className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--text-ghost)", fontFamily: "var(--font-mono)" }}>
+          Awaiting telemetry — run scan to map attack surface
         </p>
       </div>
     );
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="rounded-xl overflow-hidden"
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid color-mix(in srgb, var(--bg-border) 30%, transparent)",
-        height: "500px",
-      }}
-    >
+    <div ref={containerRef} className="command-panel overflow-hidden h-[520px]">
       <svg ref={svgRef} className="w-full h-full" />
     </div>
   );
