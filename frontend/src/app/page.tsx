@@ -16,6 +16,7 @@ interface LiveIncident {
   affectedDevice: string;
   affectedDeviceId: string;
   affectedIp: string;
+  sourceAlertId?: number;
   riskLabel: "LOW" | "MED" | "HIGH" | "CRITICAL";
   riskScore: number;
   confidence: number;
@@ -96,6 +97,7 @@ function incidentFromAlert(alert: Alert, device: TopologyNode | null): LiveIncid
     affectedDevice: device?.hostname || device?.ip || "Unknown endpoint",
     affectedDeviceId: device?.id || alert.device_mac || "unknown",
     affectedIp: device?.ip || "unknown",
+    sourceAlertId: alert.id,
     riskLabel: riskLabelFromScore(score),
     riskScore: score,
     confidence,
@@ -124,6 +126,7 @@ export default function BattlespacePage() {
   const [runtimeEvents, setRuntimeEvents] = useState<TimelineEvent[]>([]);
   const [isolatedDevices, setIsolatedDevices] = useState<Set<string>>(new Set());
   const [blockedIps, setBlockedIps] = useState<Set<string>>(new Set());
+  const [dismissedIncidentIds, setDismissedIncidentIds] = useState<Set<string>>(new Set());
   const [scanRunning, setScanRunning] = useState(false);
 
   const nodes = topology?.nodes ?? [];
@@ -208,19 +211,28 @@ export default function BattlespacePage() {
   );
 
   const autoIncident = useMemo(() => {
-    const openAlert = sortedAlerts.find((a) => !a.acknowledged && severityRank(a.severity) >= 2) ?? sortedAlerts[0];
-    if (openAlert) {
-      const device = openAlert.device_mac ? nodes.find((n) => n.id === openAlert.device_mac) ?? null : null;
-      return incidentFromAlert(openAlert, device);
+    const alertCandidates = sortedAlerts
+      .filter((alert) => !alert.acknowledged && severityRank(alert.severity) >= 2)
+      .map((alert) => {
+        const device = alert.device_mac ? nodes.find((n) => n.id === alert.device_mac) ?? null : null;
+        return incidentFromAlert(alert, device);
+      });
+
+    const openAlertIncident = alertCandidates.find((incident) => !dismissedIncidentIds.has(incident.id));
+    if (openAlertIncident) {
+      return openAlertIncident;
     }
 
     const highRisk = [...nodes].sort((a, b) => b.risk_score - a.risk_score)[0];
     if (highRisk && highRisk.risk_score >= 68) {
-      return incidentFromNode(highRisk);
+      const inferredIncident = incidentFromNode(highRisk);
+      if (!dismissedIncidentIds.has(inferredIncident.id)) {
+        return inferredIncident;
+      }
     }
 
     return null;
-  }, [nodes, sortedAlerts]);
+  }, [dismissedIncidentIds, nodes, sortedAlerts]);
 
   const activeIncident = focusedIncident ?? autoIncident;
   const mode: InterfaceMode = activeIncident ? "incident" : "normal";
@@ -322,6 +334,38 @@ export default function BattlespacePage() {
   const riskValue = stats?.avg_risk_score ?? 0;
   const riskTone = riskValue >= 70 ? "var(--status-critical)" : riskValue >= 40 ? "var(--status-warning)" : "var(--status-healthy)";
 
+  const dismissIncident = useCallback(
+    async (incident: LiveIncident | null, detail: string) => {
+      if (!incident) return;
+
+      setFocusedIncident(null);
+      setDismissedIncidentIds((prev) => {
+        const next = new Set(prev);
+        next.add(incident.id);
+        return next;
+      });
+
+      if (incident.sourceAlertId) {
+        try {
+          await api.acknowledgeAlert(incident.sourceAlertId);
+          await loadAlerts();
+          refresh();
+        } catch {
+          // Continue UI dismissal even if acknowledge request fails.
+        }
+      }
+
+      pushEvent({
+        type: "action",
+        title: "Incident dismissed",
+        detail,
+        timestamp: new Date().toISOString(),
+        severity: "info",
+      });
+    },
+    [loadAlerts, pushEvent, refresh]
+  );
+
   const runScan = useCallback(async () => {
     if (scanRunning) return;
     setScanRunning(true);
@@ -342,39 +386,48 @@ export default function BattlespacePage() {
   }, [loadAlerts, pushEvent, refresh, scanRunning]);
 
   const isolateDevice = useCallback(() => {
-    if (!activeIncident) return;
+    const incident = activeIncident;
+    if (!incident) return;
     setIsolatedDevices((prev) => {
       const next = new Set(prev);
-      next.add(activeIncident.affectedDeviceId);
+      next.add(incident.affectedDeviceId);
       return next;
     });
     pushEvent({
       type: "action",
       title: "Isolation command dispatched",
-      detail: `${activeIncident.affectedDevice} moved into quarantine VLAN (simulated).`,
+      detail: `${incident.affectedDevice} moved into quarantine VLAN (simulated).`,
       timestamp: new Date().toISOString(),
       severity: "high",
     });
-  }, [activeIncident, pushEvent]);
+    void dismissIncident(incident, `Analyst isolated ${incident.affectedDevice} and returned to monitoring mode.`);
+  }, [activeIncident, dismissIncident, pushEvent]);
 
   const blockIp = useCallback(() => {
-    if (!activeIncident) return;
+    const incident = activeIncident;
+    if (!incident) return;
     setBlockedIps((prev) => {
       const next = new Set(prev);
-      next.add(activeIncident.affectedIp);
+      next.add(incident.affectedIp);
       return next;
     });
     pushEvent({
       type: "action",
       title: "IP blocked",
-      detail: `Adaptive policy denied outbound communication from ${activeIncident.affectedIp}.`,
+      detail: `Adaptive policy denied outbound communication from ${incident.affectedIp}.`,
       timestamp: new Date().toISOString(),
       severity: "high",
     });
-  }, [activeIncident, pushEvent]);
+    void dismissIncident(incident, `Blocked ${incident.affectedIp} and closed active incident focus.`);
+  }, [activeIncident, dismissIncident, pushEvent]);
 
   const focusThreat = useCallback(
     (incident: LiveIncident) => {
+      setDismissedIncidentIds((prev) => {
+        const next = new Set(prev);
+        next.delete(incident.id);
+        return next;
+      });
       setFocusedIncident(incident);
       pushEvent({
         type: "action",
@@ -458,7 +511,14 @@ export default function BattlespacePage() {
                 <span className="material-symbols-outlined">gpp_bad</span>
                 Block IP
               </button>
-              <button onClick={runScan} className="command-btn command-btn-primary" disabled={scanRunning}>
+              <button
+                onClick={async () => {
+                  await runScan();
+                  await dismissIncident(activeIncident, "Deep scan executed and incident focus was cleared.");
+                }}
+                className="command-btn command-btn-primary"
+                disabled={scanRunning}
+              >
                 <span className={`material-symbols-outlined ${scanRunning ? "animate-spin" : ""}`}>
                   {scanRunning ? "progress_activity" : "radar"}
                 </span>
@@ -513,7 +573,15 @@ export default function BattlespacePage() {
 
               <div className="ai-meta">
                 <span>Confidence {activeIncident.confidence}%</span>
-                <button className="command-btn command-btn-muted" onClick={() => setFocusedIncident(null)}>
+                <button
+                  className="command-btn command-btn-muted"
+                  onClick={() =>
+                    dismissIncident(
+                      activeIncident,
+                      "Analyst manually exited incident focus and resumed normal monitoring."
+                    )
+                  }
+                >
                   Return to monitoring
                 </button>
               </div>
