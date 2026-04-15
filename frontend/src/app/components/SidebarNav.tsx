@@ -8,7 +8,6 @@ const navItems = [
   { href: "/devices", label: "Devices", icon: "devices" },
   { href: "/threats", label: "Threats", icon: "warning" },
   { href: "/simulate", label: "Simulate", icon: "bolt" },
-  { href: "/chat", label: "AI Chat", icon: "smart_toy" },
   { href: "/compliance", label: "Compliance", icon: "verified" },
   { href: "/report", label: "Report", icon: "summarize" },
 ];
