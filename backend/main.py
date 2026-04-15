@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sys
+import types
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,17 @@ _backend_dir = Path(__file__).resolve().parent
 _repo_root = _backend_dir.parent
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
+
+# Some serverless runtimes execute from the backend directory itself
+# (flattened layout: main.py, config.py, scanner/, ...). In that case
+# there is no physical `backend/` package folder, but our imports use
+# `backend.*`. Create a lightweight package alias that points at the
+# current directory so those imports still work.
+if not (_backend_dir / "backend").exists() and "backend" not in sys.modules:
+    backend_pkg = types.ModuleType("backend")
+    backend_pkg.__path__ = [str(_backend_dir)]  # type: ignore[attr-defined]
+    backend_pkg.__file__ = str(_backend_dir / "__init__.py")
+    sys.modules["backend"] = backend_pkg
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
