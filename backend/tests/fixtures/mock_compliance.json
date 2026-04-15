@@ -1,0 +1,37 @@
+[
+  {
+    "control_id": "CIS-1.1",
+    "title": "Maintain Detailed Asset Inventory",
+    "description": "Maintain an accurate and up-to-date inventory of all enterprise assets with the potential to store or process data, to include: end-user devices, network devices, IoT devices, and servers.",
+    "category": "inventory",
+    "severity": "high"
+  },
+  {
+    "control_id": "CIS-4.1",
+    "title": "Establish and Maintain a Secure Configuration Process",
+    "description": "Establish and maintain a secure configuration process for enterprise assets and software. Review and update documentation annually, or when significant enterprise changes occur that could impact this safeguard.",
+    "category": "configuration",
+    "severity": "high"
+  },
+  {
+    "control_id": "CIS-4.6",
+    "title": "Securely Manage Enterprise Assets and Software",
+    "description": "Ensure that only encrypted protocols such as SSH and HTTPS are used for remote management of enterprise assets. Disable insecure remote management protocols such as Telnet and unencrypted HTTP for management purposes.",
+    "category": "encryption",
+    "severity": "critical"
+  },
+  {
+    "control_id": "CIS-6.1",
+    "title": "Establish an Access Control Policy",
+    "description": "Establish and maintain an access control policy based on the principle of least privilege. Review and update documentation annually, or when significant enterprise changes occur.",
+    "category": "access_control",
+    "severity": "high"
+  },
+  {
+    "control_id": "CIS-7.1",
+    "title": "Establish and Maintain a Vulnerability Management Process",
+    "description": "Establish and maintain a documented vulnerability management process for enterprise assets. Review and update documentation annually, or when significant enterprise changes occur that could impact this safeguard.",
+    "category": "vulnerability",
+    "severity": "critical"
+  }
+]

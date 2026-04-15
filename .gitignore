@@ -1,0 +1,32 @@
+# Specs
+specs/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Data
+data/
+backend/.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
