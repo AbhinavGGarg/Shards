@@ -6,24 +6,42 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { api, type Alert, type TopologyNode } from "@/lib/api";
 import NetworkGraph from "./components/NetworkGraph";
 import DeviceDetailPanel from "./components/DeviceDetailPanel";
-import ActiveIncidentPanel from "./components/command-center/ActiveIncidentPanel";
-import AIInsightsPanel from "./components/command-center/AIInsightsPanel";
-import IntelligenceSidebar from "./components/command-center/IntelligenceSidebar";
-import IncidentTimeline from "./components/command-center/IncidentTimeline";
-import ActionRail from "./components/command-center/ActionRail";
-import type {
-  ActiveIncident,
-  IncidentRiskLevel,
-  ThreatSeverityBuckets,
-  TimelineEvent,
-  VulnerableDeviceSummary,
-} from "./components/command-center/types";
+
+type InterfaceMode = "normal" | "incident";
+type Severity = "critical" | "high" | "medium" | "low" | "info";
+
+interface LiveIncident {
+  id: string;
+  title: string;
+  affectedDevice: string;
+  affectedDeviceId: string;
+  affectedIp: string;
+  riskLabel: "LOW" | "MED" | "HIGH" | "CRITICAL";
+  riskScore: number;
+  confidence: number;
+  timestamp: string;
+  reasoning: string[];
+  suggestedActions: string[];
+}
+
+interface TimelineEvent {
+  id: string;
+  type: "scan" | "detection" | "alert" | "action";
+  title: string;
+  detail: string;
+  timestamp: string;
+  severity: Severity;
+}
 
 function edgeKey(a: string, b: string): string {
   return [a, b].sort().join("::");
 }
 
-function getSeverityRank(severity: string): number {
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function severityRank(severity: string): number {
   const norm = severity.toLowerCase();
   if (norm === "critical") return 4;
   if (norm === "high") return 3;
@@ -32,62 +50,96 @@ function getSeverityRank(severity: string): number {
   return 0;
 }
 
-function scoreToRiskLevel(score: number): IncidentRiskLevel {
-  if (score >= 75) return "CRITICAL";
-  if (score >= 55) return "HIGH";
-  if (score >= 30) return "MEDIUM";
+function riskLabelFromScore(score: number): LiveIncident["riskLabel"] {
+  if (score >= 80) return "CRITICAL";
+  if (score >= 60) return "HIGH";
+  if (score >= 35) return "MED";
   return "LOW";
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function incidentFromNode(node: TopologyNode): LiveIncident {
+  const score = Math.round(node.risk_score);
+  const confidence = clamp(50 + Math.round(score * 0.45), 55, 99);
+  const serviceList = Object.keys(node.open_ports ?? {}).slice(0, 3).join(", ") || "no major exposed ports";
+
+  return {
+    id: `node-${node.id}`,
+    title: score >= 65 ? "Suspicious lateral movement signature" : "Anomalous host behavior detected",
+    affectedDevice: node.hostname || node.ip,
+    affectedDeviceId: node.id,
+    affectedIp: node.ip,
+    riskLabel: riskLabelFromScore(score),
+    riskScore: score,
+    confidence,
+    timestamp: new Date().toISOString(),
+    reasoning: [
+      `Host risk score ${score} exceeds adaptive network baseline.`,
+      `Observed service profile: ${serviceList}.`,
+      "Traffic pattern suggests east-west probing activity.",
+    ],
+    suggestedActions: [
+      "Isolate endpoint and preserve volatile evidence.",
+      "Run deep network scan on adjacent assets.",
+      "Block suspicious outbound route and review IAM logs.",
+    ],
+  };
 }
 
-function inferVulnsFromPorts(device: TopologyNode | null): string[] {
-  if (!device) return ["Behavioral anomaly correlation", "T1078 valid account abuse pattern"];
+function incidentFromAlert(alert: Alert, device: TopologyNode | null): LiveIncident {
+  const baseScore = device?.risk_score ?? (alert.severity === "critical" ? 90 : alert.severity === "high" ? 74 : 48);
+  const score = Math.round(baseScore);
+  const confidence = clamp(Math.round(score * 0.7) + 24, 58, 99);
 
-  const ports = Object.keys(device.open_ports ?? {}).map((p) => Number(p));
-  const findings: string[] = [];
-
-  if (ports.includes(445)) findings.push("CVE-2020-0796 SMB compression RCE exposure");
-  if (ports.includes(3389)) findings.push("RDP brute-force and credential stuffing surface");
-  if (ports.includes(22)) findings.push("SSH lateral movement foothold potential");
-  if (ports.includes(80) || ports.includes(443)) findings.push("Web attack surface requires WAF policy review");
-  if (ports.includes(3306) || ports.includes(5432)) findings.push("Database service reachable from user segment");
-
-  if (findings.length === 0) {
-    findings.push("Abnormal east-west communication pattern");
-    findings.push("Unusual service fingerprint drift vs. baseline");
-  }
-
-  return findings.slice(0, 3);
+  return {
+    id: `alert-${alert.id}`,
+    title: alert.alert_type.replaceAll("_", " "),
+    affectedDevice: device?.hostname || device?.ip || "Unknown endpoint",
+    affectedDeviceId: device?.id || alert.device_mac || "unknown",
+    affectedIp: device?.ip || "unknown",
+    riskLabel: riskLabelFromScore(score),
+    riskScore: score,
+    confidence,
+    timestamp: alert.timestamp,
+    reasoning: [
+      `Alert stream classified this event as ${alert.severity.toUpperCase()} severity.`,
+      alert.message,
+      "Correlated sequence indicates potential lateral movement attempt.",
+    ],
+    suggestedActions: [
+      "Trigger endpoint isolation workflow.",
+      "Block source-to-target communication path.",
+      "Run immediate deep scan and collect host forensics.",
+    ],
+  };
 }
 
-export default function DashboardPage() {
+export default function BattlespacePage() {
   const { topology, stats, loading, error, refresh } = useNetworkData();
   const { connected, on } = useWebSocket();
 
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<TopologyNode | null>(null);
-  const [hoveredDevice, setHoveredDevice] = useState<TopologyNode | null>(null);
-  const [newDeviceMacs, setNewDeviceMacs] = useState<Set<string>>(new Set());
-  const [isolatedDeviceIds, setIsolatedDeviceIds] = useState<Set<string>>(new Set());
+  const [focusedIncident, setFocusedIncident] = useState<LiveIncident | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<TopologyNode | null>(null);
+  const [runtimeEvents, setRuntimeEvents] = useState<TimelineEvent[]>([]);
+  const [isolatedDevices, setIsolatedDevices] = useState<Set<string>>(new Set());
   const [blockedIps, setBlockedIps] = useState<Set<string>>(new Set());
-  const [timelineRuntime, setTimelineRuntime] = useState<TimelineEvent[]>([]);
-  const [deepScanRunning, setDeepScanRunning] = useState(false);
+  const [scanRunning, setScanRunning] = useState(false);
+
+  const nodes = topology?.nodes ?? [];
+
+  const pushEvent = useCallback((event: Omit<TimelineEvent, "id">) => {
+    const id = `evt-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    setRuntimeEvents((prev) => [{ id, ...event }, ...prev].slice(0, 30));
+  }, []);
 
   const loadAlerts = useCallback(async () => {
     try {
       const data = await api.getAlerts();
       setAlerts(data);
     } catch {
-      // Keep UI resilient if alerts endpoint has transient failures.
+      // Keep UI resilient even if alerts endpoint has transient issues.
     }
-  }, []);
-
-  const pushRuntimeEvent = useCallback((event: Omit<TimelineEvent, "id">) => {
-    const id = `runtime-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-    setTimelineRuntime((prev) => [{ id, ...event }, ...prev].slice(0, 20));
   }, []);
 
   useEffect(() => {
@@ -95,209 +147,144 @@ export default function DashboardPage() {
   }, [loadAlerts]);
 
   useEffect(() => {
-    const unsubs = [
-      on("scan_complete", (data: unknown) => {
-        const payload = data as { devices_found?: number };
-        pushRuntimeEvent({
+    const unsubscribers = [
+      on("scan_complete", (payload: unknown) => {
+        const data = payload as { devices_found?: number };
+        pushEvent({
           type: "scan",
-          title: "Network sweep complete",
-          detail: `Deep scan telemetry updated. Devices discovered: ${payload.devices_found ?? "n/a"}.`,
+          title: "Telemetry sweep completed",
+          detail: `Scanner refreshed attack surface map (${data.devices_found ?? "n/a"} assets).`,
           timestamp: new Date().toISOString(),
           severity: "info",
         });
         refresh();
         loadAlerts();
       }),
-      on("device_joined", (data: unknown) => {
-        const payload = data as { mac?: string; ip?: string };
-        if (payload.mac) {
-          setNewDeviceMacs((prev) => {
-            const next = new Set(prev);
-            next.add(payload.mac ?? "");
-            return next;
-          });
-          setTimeout(() => {
-            setNewDeviceMacs((prev) => {
-              const next = new Set(prev);
-              next.delete(payload.mac ?? "");
-              return next;
-            });
-          }, 6000);
-        }
-        pushRuntimeEvent({
-          type: "detection",
-          title: "New endpoint detected",
-          detail: `${payload.ip ?? "Unknown IP"} joined monitored segment.`,
-          timestamp: new Date().toISOString(),
-          severity: "medium",
-        });
-        refresh();
-      }),
-      on("device_left", (data: unknown) => {
-        const payload = data as { ip?: string };
-        pushRuntimeEvent({
-          type: "detection",
-          title: "Endpoint disconnected",
-          detail: `${payload.ip ?? "Unknown endpoint"} left monitored segment.`,
-          timestamp: new Date().toISOString(),
-          severity: "low",
-        });
-        refresh();
-      }),
-      on("port_change", () => {
-        pushRuntimeEvent({
-          type: "detection",
-          title: "Service exposure changed",
-          detail: "Detected service/port drift on monitored host.",
-          timestamp: new Date().toISOString(),
-          severity: "high",
-        });
-        refresh();
-      }),
       on("alert", () => {
-        pushRuntimeEvent({
+        pushEvent({
           type: "alert",
-          title: "New threat alert generated",
-          detail: "Correlation engine flagged suspicious activity in the network graph.",
+          title: "Threat signal generated",
+          detail: "Detection model emitted a new alert from network telemetry.",
           timestamp: new Date().toISOString(),
           severity: "high",
         });
         refresh();
         loadAlerts();
       }),
+      on("device_joined", (payload: unknown) => {
+        const data = payload as { ip?: string };
+        pushEvent({
+          type: "detection",
+          title: "Endpoint joined monitored segment",
+          detail: `${data.ip ?? "Unknown endpoint"} added to live graph.`,
+          timestamp: new Date().toISOString(),
+          severity: "low",
+        });
+        refresh();
+      }),
+      on("port_change", () => {
+        pushEvent({
+          type: "detection",
+          title: "Service fingerprint changed",
+          detail: "Open-port profile changed on a tracked device.",
+          timestamp: new Date().toISOString(),
+          severity: "medium",
+        });
+        refresh();
+      }),
     ];
 
-    return () => unsubs.forEach((u) => u());
-  }, [loadAlerts, on, pushRuntimeEvent, refresh]);
-
-  const nodes = topology?.nodes ?? [];
+    return () => unsubscribers.forEach((u) => u());
+  }, [loadAlerts, on, pushEvent, refresh]);
 
   const sortedAlerts = useMemo(
     () =>
       [...alerts].sort((a, b) => {
-        const severityDelta = getSeverityRank(b.severity) - getSeverityRank(a.severity);
-        if (severityDelta !== 0) return severityDelta;
+        const sevDiff = severityRank(b.severity) - severityRank(a.severity);
+        if (sevDiff !== 0) return sevDiff;
         return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       }),
     [alerts]
   );
 
-  const highestRiskNodes = useMemo(
-    () => [...nodes].sort((a, b) => b.risk_score - a.risk_score),
-    [nodes]
-  );
+  const autoIncident = useMemo(() => {
+    const openAlert = sortedAlerts.find((a) => !a.acknowledged && severityRank(a.severity) >= 2) ?? sortedAlerts[0];
+    if (openAlert) {
+      const device = openAlert.device_mac ? nodes.find((n) => n.id === openAlert.device_mac) ?? null : null;
+      return incidentFromAlert(openAlert, device);
+    }
 
-  const primaryAlert = sortedAlerts.find((a) => !a.acknowledged) ?? sortedAlerts[0];
-  const incidentDevice =
-    (primaryAlert?.device_mac ? nodes.find((node) => node.id === primaryAlert.device_mac) : null) ??
-    highestRiskNodes[0] ??
-    null;
+    const highRisk = [...nodes].sort((a, b) => b.risk_score - a.risk_score)[0];
+    if (highRisk && highRisk.risk_score >= 68) {
+      return incidentFromNode(highRisk);
+    }
 
-  const baseRisk = incidentDevice?.risk_score ?? (primaryAlert ? 60 : 24);
-  const confidence = clamp(
-    Math.round(baseRisk * 0.78 + (primaryAlert ? 18 : 9) + Math.min(Object.keys(incidentDevice?.open_ports ?? {}).length * 2, 10)),
-    45,
-    99
-  );
+    return null;
+  }, [nodes, sortedAlerts]);
 
-  const activeIncident: ActiveIncident = {
-    id: primaryAlert ? `alert-${primaryAlert.id}` : "baseline-incident",
-    title: primaryAlert
-      ? `Suspicious ${primaryAlert.alert_type.replaceAll("_", " ")} detected`
-      : "Potential lateral movement pattern detected",
-    affectedDevice: incidentDevice?.hostname || incidentDevice?.ip || "Unknown endpoint",
-    affectedDeviceId: incidentDevice?.id ?? "unknown-device",
-    affectedIp: incidentDevice?.ip ?? "unknown",
-    riskLevel: scoreToRiskLevel(baseRisk),
-    confidence,
-    timestamp: primaryAlert?.timestamp ?? new Date().toISOString(),
-    summary: primaryAlert?.message
-      ? `${primaryAlert.message}. Immediate triage recommended to contain blast radius.`
-      : "Behavior analytics identified anomalous east-west traffic behavior that deviates from baseline.",
-    whyFlagged: [
-      `Device risk score is ${Math.round(baseRisk)} with unusual service exposure profile.`,
-      primaryAlert
-        ? `Alert channel reported ${primaryAlert.severity.toUpperCase()} severity telemetry.`
-        : "Traffic shape indicates potential credential relay behavior.",
-      `Open services detected: ${Object.keys(incidentDevice?.open_ports ?? {}).slice(0, 3).join(", ") || "none"}.`,
-    ],
-    suggestedActions: [
-      "Isolate affected host from lateral movement pathways.",
-      "Run deep scan to confirm service fingerprint changes.",
-      "Block suspicious IP and validate authentication logs.",
-    ],
-    relatedVulnerabilities: inferVulnsFromPorts(incidentDevice),
-    sourceAlertId: primaryAlert?.id,
-  };
+  const activeIncident = focusedIncident ?? autoIncident;
+  const mode: InterfaceMode = activeIncident ? "incident" : "normal";
 
-  const threatBuckets: ThreatSeverityBuckets = useMemo(
-    () =>
-      alerts.reduce<ThreatSeverityBuckets>(
-        (acc, alert) => {
-          const sev = alert.severity.toLowerCase();
-          if (sev === "critical") acc.critical += 1;
-          else if (sev === "high") acc.high += 1;
-          else if (sev === "medium") acc.medium += 1;
-          else acc.low += 1;
-          return acc;
-        },
-        { critical: 0, high: 0, medium: 0, low: 0 }
-      ),
-    [alerts]
-  );
+  useEffect(() => {
+    if (!focusedIncident) return;
+    const stillExists = nodes.some((node) => node.id === focusedIncident.affectedDeviceId);
+    if (!stillExists) setFocusedIncident(null);
+  }, [focusedIncident, nodes]);
 
-  const vulnerableDevices: VulnerableDeviceSummary[] = useMemo(
-    () =>
-      highestRiskNodes.slice(0, 5).map((device) => ({
-        id: device.id,
-        label: device.hostname || device.ip,
-        ip: device.ip,
-        risk: device.risk_score,
-        openPortCount: Object.keys(device.open_ports ?? {}).length,
-      })),
-    [highestRiskNodes]
-  );
+  const attackPathNodeIds = useMemo(() => {
+    if (!topology || !activeIncident) return [] as string[];
+
+    const path: string[] = [];
+    const router = topology.nodes.find((n) => n.is_router);
+    if (router) path.push(router.id);
+    if (activeIncident.affectedDeviceId !== "unknown") path.push(activeIncident.affectedDeviceId);
+
+    const peer = topology.nodes.find(
+      (node) =>
+        node.id !== activeIncident.affectedDeviceId &&
+        node.id !== router?.id &&
+        (node.risk_score >= 55 || blockedIps.has(node.ip))
+    );
+    if (peer) path.push(peer.id);
+
+    return path;
+  }, [activeIncident, blockedIps, topology]);
 
   const suspiciousNodeIds = useMemo(() => {
-    const ids = new Set<string>();
-    alerts.forEach((alert) => {
-      if (alert.device_mac) ids.add(alert.device_mac);
-    });
+    const set = new Set<string>();
+
     nodes.forEach((node) => {
-      if (node.risk_score >= 65) ids.add(node.id);
-      if (isolatedDeviceIds.has(node.id)) ids.add(node.id);
+      if (node.risk_score >= 62) set.add(node.id);
     });
-    return ids;
-  }, [alerts, isolatedDeviceIds, nodes]);
+
+    alerts.forEach((alert) => {
+      if (alert.device_mac) set.add(alert.device_mac);
+    });
+
+    attackPathNodeIds.forEach((id) => set.add(id));
+    isolatedDevices.forEach((id) => set.add(id));
+
+    return set;
+  }, [alerts, attackPathNodeIds, isolatedDevices, nodes]);
 
   const attackLinkKeys = useMemo(() => {
     const keys = new Set<string>();
     if (!topology) return keys;
 
-    const router = topology.nodes.find((n) => n.is_router);
-    if (router && incidentDevice && router.id !== incidentDevice.id) {
-      keys.add(edgeKey(router.id, incidentDevice.id));
+    for (let i = 0; i < attackPathNodeIds.length - 1; i += 1) {
+      keys.add(edgeKey(attackPathNodeIds[i], attackPathNodeIds[i + 1]));
     }
 
     topology.edges.forEach((edge) => {
-      if (suspiciousNodeIds.has(edge.source) || suspiciousNodeIds.has(edge.target)) {
+      if (suspiciousNodeIds.has(edge.source) && suspiciousNodeIds.has(edge.target)) {
         keys.add(edgeKey(edge.source, edge.target));
       }
     });
 
     return keys;
-  }, [incidentDevice, suspiciousNodeIds, topology]);
+  }, [attackPathNodeIds, suspiciousNodeIds, topology]);
 
-  const riskTrend = useMemo(() => {
-    const base = stats?.avg_risk_score ?? 22;
-    return Array.from({ length: 12 }, (_, i) => {
-      const wave = Math.sin(i * 0.7) * 5;
-      const drift = (i - 6) * 0.55;
-      return clamp(base + wave + drift, 6, 96);
-    });
-  }, [stats?.avg_risk_score]);
-
-  const timelineEvents = useMemo<TimelineEvent[]>(() => {
+  const timeline = useMemo<TimelineEvent[]>(() => {
     const alertEvents: TimelineEvent[] = sortedAlerts.slice(0, 8).map((alert) => ({
       id: `alert-${alert.id}`,
       type: "alert",
@@ -317,97 +304,31 @@ export default function DashboardPage() {
     const scanEvent: TimelineEvent[] = stats?.last_scan
       ? [
           {
-            id: "last-scan",
+            id: "scan-last",
             type: "scan",
-            title: "Background scan completed",
-            detail: `Telemetry synchronized across ${stats.total_devices} monitored assets.`,
+            title: "Background monitoring cycle",
+            detail: `Observed ${stats.total_devices} monitored devices in latest cycle.`,
             timestamp: stats.last_scan,
             severity: "info",
           },
         ]
       : [];
 
-    return [...timelineRuntime, ...scanEvent, ...alertEvents]
+    return [...runtimeEvents, ...scanEvent, ...alertEvents]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 14);
-  }, [sortedAlerts, stats?.last_scan, stats?.total_devices, timelineRuntime]);
+      .slice(0, 16);
+  }, [runtimeEvents, sortedAlerts, stats?.last_scan, stats?.total_devices]);
 
-  const handleInvestigate = useCallback(() => {
-    if (incidentDevice) {
-      setSelectedDevice(incidentDevice);
-      pushRuntimeEvent({
-        type: "action",
-        title: "Investigation started",
-        detail: `Analyst opened forensic panel for ${incidentDevice.hostname || incidentDevice.ip}.`,
-        timestamp: new Date().toISOString(),
-        severity: "info",
-      });
-    }
-  }, [incidentDevice, pushRuntimeEvent]);
+  const riskValue = stats?.avg_risk_score ?? 0;
+  const riskTone = riskValue >= 70 ? "var(--status-critical)" : riskValue >= 40 ? "var(--status-warning)" : "var(--status-healthy)";
 
-  const handleIsolate = useCallback(() => {
-    if (!incidentDevice) return;
-    setIsolatedDeviceIds((prev) => {
-      const next = new Set(prev);
-      next.add(incidentDevice.id);
-      return next;
-    });
-    pushRuntimeEvent({
+  const runScan = useCallback(async () => {
+    if (scanRunning) return;
+    setScanRunning(true);
+    pushEvent({
       type: "action",
-      title: "Isolation command simulated",
-      detail: `${incidentDevice.hostname || incidentDevice.ip} moved to quarantine segment.`,
-      timestamp: new Date().toISOString(),
-      severity: "high",
-    });
-  }, [incidentDevice, pushRuntimeEvent]);
-
-  const handleIgnore = useCallback(async () => {
-    if (!activeIncident.sourceAlertId) return;
-    try {
-      await api.acknowledgeAlert(activeIncident.sourceAlertId);
-      pushRuntimeEvent({
-        type: "action",
-        title: "Alert acknowledged",
-        detail: `Alert #${activeIncident.sourceAlertId} marked as reviewed by analyst.`,
-        timestamp: new Date().toISOString(),
-        severity: "low",
-      });
-      loadAlerts();
-      refresh();
-    } catch {
-      pushRuntimeEvent({
-        type: "action",
-        title: "Acknowledge failed",
-        detail: "Unable to acknowledge alert due to API response error.",
-        timestamp: new Date().toISOString(),
-        severity: "medium",
-      });
-    }
-  }, [activeIncident.sourceAlertId, loadAlerts, pushRuntimeEvent, refresh]);
-
-  const handleBlockIp = useCallback(() => {
-    if (!incidentDevice) return;
-    setBlockedIps((prev) => {
-      const next = new Set(prev);
-      next.add(incidentDevice.ip);
-      return next;
-    });
-    pushRuntimeEvent({
-      type: "action",
-      title: "IP blocked",
-      detail: `Firewall simulation rule applied to ${incidentDevice.ip}.`,
-      timestamp: new Date().toISOString(),
-      severity: "high",
-    });
-  }, [incidentDevice, pushRuntimeEvent]);
-
-  const handleDeepScan = useCallback(async () => {
-    if (deepScanRunning) return;
-    setDeepScanRunning(true);
-    pushRuntimeEvent({
-      type: "action",
-      title: "Deep scan initiated",
-      detail: "Running advanced probe across high-risk subnet.",
+      title: "Deep scan triggered",
+      detail: "Executing active scan workflow across monitored segment.",
       timestamp: new Date().toISOString(),
       severity: "info",
     });
@@ -415,181 +336,256 @@ export default function DashboardPage() {
     try {
       await api.triggerScan();
       await Promise.all([refresh(), loadAlerts()]);
-      pushRuntimeEvent({
-        type: "scan",
-        title: "Deep scan completed",
-        detail: "No sensor failures detected. Telemetry has been refreshed.",
+    } finally {
+      setScanRunning(false);
+    }
+  }, [loadAlerts, pushEvent, refresh, scanRunning]);
+
+  const isolateDevice = useCallback(() => {
+    if (!activeIncident) return;
+    setIsolatedDevices((prev) => {
+      const next = new Set(prev);
+      next.add(activeIncident.affectedDeviceId);
+      return next;
+    });
+    pushEvent({
+      type: "action",
+      title: "Isolation command dispatched",
+      detail: `${activeIncident.affectedDevice} moved into quarantine VLAN (simulated).`,
+      timestamp: new Date().toISOString(),
+      severity: "high",
+    });
+  }, [activeIncident, pushEvent]);
+
+  const blockIp = useCallback(() => {
+    if (!activeIncident) return;
+    setBlockedIps((prev) => {
+      const next = new Set(prev);
+      next.add(activeIncident.affectedIp);
+      return next;
+    });
+    pushEvent({
+      type: "action",
+      title: "IP blocked",
+      detail: `Adaptive policy denied outbound communication from ${activeIncident.affectedIp}.`,
+      timestamp: new Date().toISOString(),
+      severity: "high",
+    });
+  }, [activeIncident, pushEvent]);
+
+  const focusThreat = useCallback(
+    (incident: LiveIncident) => {
+      setFocusedIncident(incident);
+      pushEvent({
+        type: "action",
+        title: "Incident focus mode engaged",
+        detail: `Analyst centered battlespace on ${incident.affectedDevice}.`,
         timestamp: new Date().toISOString(),
         severity: "info",
       });
-    } catch {
-      pushRuntimeEvent({
-        type: "scan",
-        title: "Deep scan failed",
-        detail: "Command center could not complete the scan request.",
-        timestamp: new Date().toISOString(),
-        severity: "medium",
-      });
-    } finally {
-      setDeepScanRunning(false);
-    }
-  }, [deepScanRunning, loadAlerts, pushRuntimeEvent, refresh]);
+    },
+    [pushEvent]
+  );
 
   return (
-    <div className="flex flex-col gap-4 pb-4">
-      <ActiveIncidentPanel
-        incident={activeIncident}
-        onInvestigate={handleInvestigate}
-        onIsolate={handleIsolate}
-        onIgnore={handleIgnore}
-        isolated={isolatedDeviceIds.has(activeIncident.affectedDeviceId)}
-      />
+    <div className={`battlespace-root ${mode === "incident" ? "incident" : "normal"}`}>
+      <div className="battlespace-stage">
+        <NetworkGraph
+          data={topology}
+          mode={mode}
+          focusNodeId={activeIncident?.affectedDeviceId ?? null}
+          suspiciousNodes={suspiciousNodeIds}
+          attackLinkKeys={attackLinkKeys}
+          onNodeClick={(node) => {
+            setSelectedDevice(node);
+            if (mode === "normal" && node.risk_score >= 40) {
+              focusThreat(incidentFromNode(node));
+            }
+          }}
+          onNodeHover={setHoveredNode}
+          height={Math.max(560, mode === "incident" ? 700 : 640)}
+          className="battlespace-graph"
+        />
+
+        <div className="battlespace-dim-layer" />
+
+        <div className="battlespace-headline">
+          <p className="command-kicker">Live Cyber Battlespace</p>
+          <h2>{mode === "incident" ? "Active Incident Response" : "Network Monitoring"}</h2>
+          <p>
+            {mode === "incident"
+              ? "Threat response mode engaged. Focused containment and investigation controls are active."
+              : "Calm-state telemetry. Systems are monitored continuously with adaptive anomaly detection."}
+          </p>
+        </div>
+
+        {mode === "incident" && activeIncident && (
+          <section className="incident-focus-panel">
+            <p className="command-kicker">Incident Focus</p>
+            <h3>{activeIncident.title}</h3>
+            <p className="incident-focus-sub">
+              Affected device: <strong>{activeIncident.affectedDevice}</strong> · Risk {activeIncident.riskLabel} · Confidence {activeIncident.confidence}%
+            </p>
+            <div className="incident-focus-path">
+              {attackPathNodeIds.length > 0 ? (
+                attackPathNodeIds.map((id, idx) => {
+                  const node = nodes.find((n) => n.id === id);
+                  return (
+                    <span key={id} className="incident-path-node">
+                      {node?.hostname || node?.ip || id.slice(0, 6)}
+                      {idx < attackPathNodeIds.length - 1 && <span className="incident-path-arrow">→</span>}
+                    </span>
+                  );
+                })
+              ) : (
+                <span className="incident-path-node">Awaiting attack path telemetry…</span>
+              )}
+            </div>
+            <div className="incident-actions">
+              <button onClick={isolateDevice} className="command-btn">
+                <span className="material-symbols-outlined">link_off</span>
+                Isolate Device
+              </button>
+              <button
+                onClick={blockIp}
+                className="command-btn"
+                style={{
+                  color: "var(--status-critical)",
+                  borderColor: "color-mix(in srgb, var(--status-critical) 44%, transparent)",
+                  background: "color-mix(in srgb, var(--status-critical) 14%, transparent)",
+                }}
+              >
+                <span className="material-symbols-outlined">gpp_bad</span>
+                Block IP
+              </button>
+              <button onClick={runScan} className="command-btn command-btn-primary" disabled={scanRunning}>
+                <span className={`material-symbols-outlined ${scanRunning ? "animate-spin" : ""}`}>
+                  {scanRunning ? "progress_activity" : "radar"}
+                </span>
+                {scanRunning ? "Running Scan" : "Run Scan"}
+              </button>
+            </div>
+          </section>
+        )}
+
+        <aside className="battlespace-ai-panel">
+          <div className="battlespace-ai-head">
+            <p className="command-kicker">AI Operator</p>
+            <span className={mode === "incident" ? "command-pill command-pill-critical" : "command-pill command-pill-safe"}>
+              {mode === "incident" ? "Active" : "Idle"}
+            </span>
+          </div>
+
+          {mode === "normal" || !activeIncident ? (
+            <div className="battlespace-ai-idle">
+              <h4>All systems operating normally</h4>
+              <p>Telemetry models are stable. No confirmed incident requires focus mode.</p>
+
+              <div className="idle-threat-list">
+                {sortedAlerts.slice(0, 3).map((alert) => {
+                  const device = alert.device_mac ? nodes.find((n) => n.id === alert.device_mac) ?? null : null;
+                  const incident = incidentFromAlert(alert, device);
+                  return (
+                    <button key={alert.id} onClick={() => focusThreat(incident)} className="idle-threat-item">
+                      <span>{alert.alert_type.replaceAll("_", " ")}</span>
+                      <small>{alert.severity.toUpperCase()}</small>
+                    </button>
+                  );
+                })}
+                {sortedAlerts.length === 0 && <p className="text-sm" style={{ color: "var(--text-ghost)" }}>No active threat signals.</p>}
+              </div>
+            </div>
+          ) : (
+            <div className="battlespace-ai-active">
+              <h4>AI explanation</h4>
+              <ul>
+                {activeIncident.reasoning.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+
+              <h5>Suggested actions</h5>
+              <ul>
+                {activeIncident.suggestedActions.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+
+              <div className="ai-meta">
+                <span>Confidence {activeIncident.confidence}%</span>
+                <button className="command-btn command-btn-muted" onClick={() => setFocusedIncident(null)}>
+                  Return to monitoring
+                </button>
+              </div>
+            </div>
+          )}
+        </aside>
+
+        <section className={`battlespace-bottom ${mode === "incident" ? "expanded" : "compact"}`}>
+          {mode === "normal" ? (
+            <div className="battlespace-metrics-inline">
+              <MetricInline label="Risk Score" value={riskValue.toFixed(1)} tone={riskTone} />
+              <MetricInline label="Devices" value={String(stats?.total_devices ?? nodes.length)} tone="var(--status-info)" />
+              <MetricInline label="Alerts" value={String(alerts.length)} tone={alerts.length > 0 ? "var(--status-warning)" : "var(--status-healthy)"} />
+              <MetricInline label="Status" value={connected ? "Connected" : "Reconnecting"} tone={connected ? "var(--status-healthy)" : "var(--status-warning)"} />
+            </div>
+          ) : (
+            <div className="battlespace-timeline">
+              <div className="timeline-head">
+                <p className="command-kicker">Incident Timeline</p>
+                <span className="command-pill command-pill-info">Live events</span>
+              </div>
+
+              <div className="timeline-list">
+                {timeline.map((event) => (
+                  <div key={event.id} className="timeline-item">
+                    <span className={`timeline-dot ${event.severity}`} />
+                    <div>
+                      <p className="timeline-title">{event.title}</p>
+                      <p className="timeline-detail">{event.detail}</p>
+                    </div>
+                    <span className="timeline-time">{new Date(event.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {hoveredNode && (
+          <div className="battlespace-hover-readout">
+            <span>{hoveredNode.hostname || hoveredNode.ip}</span>
+            <span>Risk {Math.round(hoveredNode.risk_score)}</span>
+          </div>
+        )}
+      </div>
 
       {error && (
-        <div className="command-panel px-4 py-3 flex items-center gap-3" style={{ borderColor: "color-mix(in srgb, var(--status-critical) 45%, transparent)" }}>
-          <span className="material-symbols-outlined" style={{ color: "var(--status-critical)" }}>
-            error
-          </span>
-          <div>
-            <p className="command-kicker" style={{ color: "var(--status-critical)" }}>
-              Data Pipeline Warning
-            </p>
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              {error}
-            </p>
-          </div>
+        <div className="mt-3 command-panel px-4 py-3 text-sm" style={{ borderColor: "color-mix(in srgb, var(--status-critical) 45%, transparent)", color: "var(--text-secondary)" }}>
+          Data stream warning: {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_360px] gap-4 items-start">
-        <IntelligenceSidebar
-          avgRisk={stats?.avg_risk_score ?? 0}
-          riskTrend={riskTrend}
-          threatBuckets={threatBuckets}
-          vulnerableDevices={vulnerableDevices}
-          totalDevices={stats?.total_devices ?? nodes.length}
-          lastScan={stats?.last_scan ?? null}
-        />
-
-        <div className="flex flex-col gap-4">
-          <ActionRail
-            onIsolate={handleIsolate}
-            onBlockIp={handleBlockIp}
-            onDeepScan={handleDeepScan}
-            deepScanRunning={deepScanRunning}
-            targetLabel={incidentDevice?.hostname || incidentDevice?.ip || "Unassigned"}
-          />
-
-          <section className="command-panel p-3.5">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-1.5 pb-3">
-              <div>
-                <p className="command-kicker">Network Attack Surface</p>
-                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                  {connected ? "Live telemetry stream connected" : "Realtime stream reconnecting"}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={connected ? "command-pill command-pill-safe" : "command-pill command-pill-critical"}>
-                  <span className="material-symbols-outlined">sensors</span>
-                  {connected ? "Telemetry Live" : "Stream Offline"}
-                </span>
-                {loading && <span className="command-pill command-pill-info">Refreshing…</span>}
-              </div>
-            </div>
-
-            <NetworkGraph
-              data={topology}
-              onNodeClick={(node) => setSelectedDevice(node)}
-              onNodeHover={setHoveredDevice}
-              pulsingNodes={newDeviceMacs}
-              suspiciousNodes={suspiciousNodeIds}
-              attackLinkKeys={attackLinkKeys}
-            />
-
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-              <InfoTile
-                title="Suspicious Nodes"
-                value={String(suspiciousNodeIds.size)}
-                subtitle="flagged in current model"
-                tone="critical"
-              />
-              <InfoTile
-                title="Attack Paths"
-                value={String(attackLinkKeys.size)}
-                subtitle="active/highlighted links"
-                tone="warning"
-              />
-              <InfoTile
-                title="Focus"
-                value={hoveredDevice?.hostname || hoveredDevice?.ip || "Hover node"}
-                subtitle={
-                  hoveredDevice
-                    ? `risk ${Math.round(hoveredDevice.risk_score)} • ${hoveredDevice.device_type}`
-                    : "device details preview"
-                }
-                tone="info"
-              />
-            </div>
-          </section>
-        </div>
-
-        <AIInsightsPanel
-          incident={activeIncident}
-          onIsolate={handleIsolate}
-          onBlockIp={handleBlockIp}
-          onDeepScan={handleDeepScan}
-          blockActive={blockedIps.has(activeIncident.affectedIp)}
-          deepScanRunning={deepScanRunning}
-        />
-      </div>
-
-      <div className="relative z-10">
-        <IncidentTimeline events={timelineEvents} />
-      </div>
-
       {selectedDevice && (
-        <div className="fixed right-0 top-16 bottom-14 z-50 shadow-2xl">
+        <div className="fixed right-0 top-16 bottom-0 z-50 shadow-2xl">
           <DeviceDetailPanel device={selectedDevice} onClose={() => setSelectedDevice(null)} />
+        </div>
+      )}
+
+      {loading && (
+        <div className="battlespace-loading">
+          <div className="w-10 h-10 rounded-full border-2 border-[var(--status-info)] border-t-transparent animate-spin" />
         </div>
       )}
     </div>
   );
 }
 
-function InfoTile({
-  title,
-  value,
-  subtitle,
-  tone,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  tone: "critical" | "warning" | "info";
-}) {
-  const colorByTone = {
-    critical: "var(--status-critical)",
-    warning: "var(--status-warning)",
-    info: "var(--status-info)",
-  } as const;
-
-  const color = colorByTone[tone];
-
+function MetricInline({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div
-      className="rounded-xl px-3 py-2"
-      style={{
-        background: "var(--bg-panel)",
-        border: `1px solid color-mix(in srgb, ${color} 26%, transparent)`,
-      }}
-    >
-      <p className="command-kicker">{title}</p>
-      <p className="text-sm font-semibold mt-1 truncate" style={{ color: "var(--text-primary)" }}>
-        {value}
-      </p>
-      <p className="text-xs" style={{ color: "var(--text-ghost)" }}>
-        {subtitle}
-      </p>
+    <div className="metric-inline">
+      <p>{label}</p>
+      <strong style={{ color: tone }}>{value}</strong>
     </div>
   );
 }

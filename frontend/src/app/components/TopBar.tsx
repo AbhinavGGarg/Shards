@@ -6,19 +6,19 @@ import FragmentsLogo from "./FragmentsLogo";
 export default function TopBar() {
   return (
     <header
-      className="h-16 flex items-center justify-between gap-4 px-4 lg:px-8 flex-shrink-0"
+      className="h-16 flex items-center justify-between gap-4 px-4 lg:px-6"
       style={{
         background: "color-mix(in srgb, var(--bg-sidebar) 88%, transparent)",
-        backdropFilter: "blur(10px)",
+        backdropFilter: "blur(12px)",
         borderBottom: "1px solid var(--border-soft)",
       }}
     >
       <Link href="/" className="flex-shrink-0">
-        <FragmentsLogo size={36} variant="wordmark-accent" />
+        <FragmentsLogo size={34} variant="wordmark-accent" />
       </Link>
 
       <div
-        className="hidden md:flex items-center gap-3 h-10 px-4 rounded-xl flex-1 max-w-[720px]"
+        className="hidden md:flex items-center gap-3 h-10 px-4 rounded-xl flex-1 max-w-[760px]"
         style={{
           background: "var(--bg-panel)",
           border: "1px solid var(--border-soft)",
@@ -29,26 +29,16 @@ export default function TopBar() {
         </span>
         <input
           type="text"
-          placeholder="Search assets, indicators, CVEs, users…"
+          placeholder="Search hosts, indicators, processes, CVEs…"
           className="flex-1 bg-transparent outline-none text-sm"
           style={{ color: "var(--text-primary)", fontFamily: "var(--font-sans)" }}
         />
-        <kbd
-          className="px-2 py-0.5 text-[10px] rounded"
-          style={{
-            background: "rgba(38, 52, 73, 0.65)",
-            color: "var(--text-ghost)",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          ⌘K
-        </kbd>
       </div>
 
-      <div className="flex items-center gap-2.5 lg:gap-3 pl-0 lg:pl-2">
+      <div className="flex items-center gap-2.5">
         <div className="command-pill command-pill-safe hidden xl:inline-flex">
           <span className="w-1.5 h-1.5 rounded-full glow-pulse" style={{ background: "currentColor" }} />
-          System healthy
+          Monitoring
         </div>
 
         <button

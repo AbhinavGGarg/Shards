@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import SidebarNav from "./components/SidebarNav";
 import TopBar from "./components/TopBar";
-import BottomStatusBar from "./components/BottomStatusBar";
 
 export const metadata: Metadata = {
   title: "Fragments — Network Security Platform",
@@ -32,23 +30,11 @@ export default function RootLayout({
       >
         <div className="sticky top-0 z-40">
           <TopBar />
-          <div
-            className="px-4 lg:px-8 py-2"
-            style={{
-              background: "color-mix(in srgb, var(--bg-sidebar) 84%, transparent)",
-              backdropFilter: "blur(10px)",
-              borderBottom: "1px solid var(--border-soft)",
-            }}
-          >
-            <SidebarNav />
-          </div>
         </div>
 
         <main className="flex-1 overflow-auto">
-          <div className="p-4 lg:p-8 max-w-[1800px] mx-auto">{children}</div>
+          <div className="p-4 lg:p-6 max-w-[1900px] mx-auto">{children}</div>
         </main>
-
-        <BottomStatusBar />
       </body>
     </html>
   );
