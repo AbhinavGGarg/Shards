@@ -109,7 +109,7 @@ export default function ActiveIncidentPanel({
               : "color-mix(in srgb, var(--status-warning) 10%, transparent)",
           }}
         >
-          <span className="material-symbols-outlined">lan_disconnect</span>
+          <span className="material-symbols-outlined">link_off</span>
           {isolated ? "Device Isolated" : "Isolate Device"}
         </button>
         <button onClick={onIgnore} className="command-btn command-btn-muted">

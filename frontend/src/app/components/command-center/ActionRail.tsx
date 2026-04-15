@@ -24,7 +24,7 @@ export default function ActionRail({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={onIsolate} className="command-btn">
-            <span className="material-symbols-outlined">lan_disconnect</span>
+            <span className="material-symbols-outlined">link_off</span>
             Isolate Device
           </button>
           <button

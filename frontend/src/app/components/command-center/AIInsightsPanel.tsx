@@ -20,7 +20,7 @@ export default function AIInsightsPanel({
   deepScanRunning,
 }: AIInsightsPanelProps) {
   return (
-    <aside className="command-panel p-5 h-full min-h-[560px] flex flex-col">
+    <aside className="command-panel p-5 min-h-[560px] flex flex-col">
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="command-kicker">AI Threat Analyst</p>
@@ -73,7 +73,7 @@ export default function AIInsightsPanel({
         <h4 className="command-subhead">Rapid response</h4>
         <div className="mt-3 space-y-2.5">
           <button onClick={onIsolate} className="command-btn w-full justify-center">
-            <span className="material-symbols-outlined">shield_lock</span>
+            <span className="material-symbols-outlined">shield</span>
             Isolate Device
           </button>
           <button

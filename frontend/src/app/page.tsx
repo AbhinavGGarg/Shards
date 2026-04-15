@@ -436,7 +436,7 @@ export default function DashboardPage() {
   }, [deepScanRunning, loadAlerts, pushRuntimeEvent, refresh]);
 
   return (
-    <div className="h-[calc(100vh-4rem)] min-h-0 flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pb-4">
       <ActiveIncidentPanel
         incident={activeIncident}
         onInvestigate={handleInvestigate}
@@ -461,7 +461,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_360px] gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_360px] gap-4 items-start">
         <IntelligenceSidebar
           avgRisk={stats?.avg_risk_score ?? 0}
           riskTrend={riskTrend}
@@ -471,7 +471,7 @@ export default function DashboardPage() {
           lastScan={stats?.last_scan ?? null}
         />
 
-        <div className="flex flex-col gap-4 min-h-0">
+        <div className="flex flex-col gap-4">
           <ActionRail
             onIsolate={handleIsolate}
             onBlockIp={handleBlockIp}
@@ -480,7 +480,7 @@ export default function DashboardPage() {
             targetLabel={incidentDevice?.hostname || incidentDevice?.ip || "Unassigned"}
           />
 
-          <section className="command-panel p-3.5 flex-1 min-h-0">
+          <section className="command-panel p-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2 px-1.5 pb-3">
               <div>
                 <p className="command-kicker">Network Attack Surface</p>
@@ -543,7 +543,9 @@ export default function DashboardPage() {
         />
       </div>
 
-      <IncidentTimeline events={timelineEvents} />
+      <div className="relative z-10">
+        <IncidentTimeline events={timelineEvents} />
+      </div>
 
       {selectedDevice && (
         <div className="fixed right-0 top-16 bottom-14 z-50 shadow-2xl">

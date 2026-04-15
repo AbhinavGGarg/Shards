@@ -22,7 +22,7 @@ export default function IntelligenceSidebar({
   const maxTrend = Math.max(...riskTrend, 1);
 
   return (
-    <aside className="flex flex-col gap-4 h-full">
+    <aside className="flex flex-col gap-4">
       <section className="command-panel p-4">
         <p className="command-kicker">Risk Posture</p>
         <div className="mt-2 flex items-end justify-between gap-2">
