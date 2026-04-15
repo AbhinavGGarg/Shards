@@ -128,6 +128,7 @@ export default function BattlespacePage() {
   const [blockedIps, setBlockedIps] = useState<Set<string>>(new Set());
   const [dismissedIncidentIds, setDismissedIncidentIds] = useState<Set<string>>(new Set());
   const [scanRunning, setScanRunning] = useState(false);
+  const [autoBootstrapAttempted, setAutoBootstrapAttempted] = useState(false);
 
   const nodes = topology?.nodes ?? [];
 
@@ -385,6 +386,26 @@ export default function BattlespacePage() {
     }
   }, [loadAlerts, pushEvent, refresh, scanRunning]);
 
+  useEffect(() => {
+    const noTelemetry =
+      (stats?.total_devices ?? nodes.length) === 0 &&
+      alerts.length === 0 &&
+      nodes.length === 0;
+
+    if (loading || scanRunning || autoBootstrapAttempted || !noTelemetry) return;
+
+    setAutoBootstrapAttempted(true);
+    void runScan();
+  }, [
+    alerts.length,
+    autoBootstrapAttempted,
+    loading,
+    nodes.length,
+    runScan,
+    scanRunning,
+    stats?.total_devices,
+  ]);
+
   const isolateDevice = useCallback(() => {
     const incident = activeIncident;
     if (!incident) return;
@@ -595,7 +616,21 @@ export default function BattlespacePage() {
               <MetricInline label="Risk Score" value={riskValue.toFixed(1)} tone={riskTone} />
               <MetricInline label="Devices" value={String(stats?.total_devices ?? nodes.length)} tone="var(--status-info)" />
               <MetricInline label="Alerts" value={String(alerts.length)} tone={alerts.length > 0 ? "var(--status-warning)" : "var(--status-healthy)"} />
-              <MetricInline label="Status" value={connected ? "Connected" : "Reconnecting"} tone={connected ? "var(--status-healthy)" : "var(--status-warning)"} />
+              <MetricInline
+                label="Status"
+                value={connected ? "Live Stream" : "HTTP Fallback"}
+                tone={connected ? "var(--status-healthy)" : "var(--status-info)"}
+              />
+              <button
+                onClick={() => void runScan()}
+                className="command-btn command-btn-primary"
+                disabled={scanRunning}
+              >
+                <span className={`material-symbols-outlined ${scanRunning ? "animate-spin" : ""}`}>
+                  {scanRunning ? "progress_activity" : "radar"}
+                </span>
+                {scanRunning ? "Scanning" : "Run Demo Scan"}
+              </button>
             </div>
           ) : (
             <div className="battlespace-timeline">
