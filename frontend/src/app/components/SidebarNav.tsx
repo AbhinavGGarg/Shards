@@ -14,19 +14,22 @@ const navItems = [
 
 export default function SidebarNav() {
   const pathname = usePathname();
+
   return (
-    <ul className="flex-1 py-4 space-y-0.5">
-      {navItems.map((item) => {
-        const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-        return (
-          <li key={item.href}>
-            <Link href={item.href} className={`nav-item ${active ? "active" : ""}`}>
-              <span className="material-symbols-outlined">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+    <nav className="top-nav-scroll" aria-label="Primary">
+      <ul className="flex items-center gap-2 min-w-max">
+        {navItems.map((item) => {
+          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          return (
+            <li key={item.href}>
+              <Link href={item.href} className={`top-nav-item ${active ? "active" : ""}`}>
+                <span className="material-symbols-outlined">{item.icon}</span>
+                <span>{item.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }

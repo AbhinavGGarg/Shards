@@ -1,17 +1,24 @@
 "use client";
 
+import Link from "next/link";
+import FragmentsLogo from "./FragmentsLogo";
+
 export default function TopBar() {
   return (
     <header
-      className="h-16 flex items-center justify-between px-6 lg:px-8 flex-shrink-0"
+      className="h-16 flex items-center justify-between gap-4 px-4 lg:px-8 flex-shrink-0"
       style={{
-        background: "color-mix(in srgb, var(--bg-sidebar) 86%, transparent)",
+        background: "color-mix(in srgb, var(--bg-sidebar) 88%, transparent)",
         backdropFilter: "blur(10px)",
         borderBottom: "1px solid var(--border-soft)",
       }}
     >
+      <Link href="/" className="flex-shrink-0">
+        <FragmentsLogo size={36} variant="wordmark-accent" />
+      </Link>
+
       <div
-        className="flex items-center gap-3 w-full max-w-[560px] h-10 px-4 rounded-xl"
+        className="hidden md:flex items-center gap-3 h-10 px-4 rounded-xl flex-1 max-w-[720px]"
         style={{
           background: "var(--bg-panel)",
           border: "1px solid var(--border-soft)",
@@ -38,8 +45,8 @@ export default function TopBar() {
         </kbd>
       </div>
 
-      <div className="flex items-center gap-3 lg:gap-4 pl-4">
-        <div className="command-pill command-pill-safe hidden sm:inline-flex">
+      <div className="flex items-center gap-2.5 lg:gap-3 pl-0 lg:pl-2">
+        <div className="command-pill command-pill-safe hidden xl:inline-flex">
           <span className="w-1.5 h-1.5 rounded-full glow-pulse" style={{ background: "currentColor" }} />
           System healthy
         </div>
