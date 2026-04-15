@@ -4,9 +4,19 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, AsyncGenerator
+
+# Support both import styles:
+# - `import backend.main` (repo root on PYTHONPATH)
+# - `import main` (backend/ as working directory, common on serverless entrypoints)
+_backend_dir = Path(__file__).resolve().parent
+_repo_root = _backend_dir.parent
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
