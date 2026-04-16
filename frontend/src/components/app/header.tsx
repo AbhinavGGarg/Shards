@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, LogOut, Rocket, ScanLine, Search, Settings2, UserCircle2 } from "lucide-react";
+import { ArrowLeft, Bell, LogOut, Rocket, ScanLine, Search, Settings2, UserCircle2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { clearSession, readSession } from "@/lib/auth";
@@ -164,6 +164,7 @@ export function AppHeader() {
 
   const unreadCount = notifications.filter((notification) => !notification.read).length;
   const pageTitle = pageTitles[pathname] ?? "Shards Platform";
+  const showBackToDashboard = pathname !== "/dashboard";
   const action = React.useMemo(() => contextActionForPath(pathname), [pathname]);
 
   const runPrimaryAction = React.useCallback(async () => {
@@ -192,11 +193,26 @@ export function AppHeader() {
         <div className="flex h-16 items-center gap-3 px-4 lg:px-6">
           <MobileSidebar />
 
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold lg:text-lg">{pageTitle}</h1>
-            <p className="hidden text-[11px] uppercase tracking-[0.14em] text-[color:var(--text-ghost)] md:block">
-              {settings.workspaceName} · cyber operations workspace
-            </p>
+          <div className="min-w-0 flex items-center gap-2">
+            {showBackToDashboard && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/dashboard")}
+                aria-label="Back to dashboard"
+                className="inline-flex"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </Button>
+            )}
+
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-semibold lg:text-lg">{pageTitle}</h1>
+              <p className="hidden text-[11px] uppercase tracking-[0.14em] text-[color:var(--text-ghost)] md:block">
+                {settings.workspaceName} · cyber operations workspace
+              </p>
+            </div>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
