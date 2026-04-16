@@ -1,5 +1,6 @@
 # Shards
 
+<img width="1536" height="1024" alt="ChatGPT_Image_Apr_16_2026_12_16_18_AM" src="https://github.com/user-attachments/assets/0dc25dba-2f30-49e7-947e-e3c2c445d937" />
 
 **AI-powered network security and threat intelligence platform**.
 Shards helps teams discover devices, score risk, monitor threats, simulate lateral movement, assess compliance, and generate security reports.
