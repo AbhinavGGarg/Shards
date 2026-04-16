@@ -13,7 +13,7 @@ import {
   Timer,
 } from "lucide-react";
 import { useNetworkData } from "@/hooks/useNetworkData";
-import { api, type Alert, type Device } from "@/lib/api";
+import { api, getRuntimeApiBase, type Alert, type Device } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +23,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const HISTORY_KEY = "shards-report-history-v1";
 
 type ReportStep = "overview" | "configuration" | "preview" | "generate" | "history";
@@ -155,7 +154,9 @@ export default function ReportsPage() {
 
     try {
       const result = await api.generateReport();
-      const fullUrl = result.report_url.startsWith("http") ? result.report_url : `${API_BASE}${result.report_url}`;
+      const fullUrl = result.report_url.startsWith("http")
+        ? result.report_url
+        : `${getRuntimeApiBase()}${result.report_url}`;
       setGeneratedUrl(fullUrl);
       setProgress(100);
 

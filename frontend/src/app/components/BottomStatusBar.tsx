@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getRuntimeApiBase } from "@/lib/api";
 
 type ScanStatus = {
   scanning: boolean;
@@ -8,8 +9,6 @@ type ScanStatus = {
   device_count: number;
   alert_count: number;
 };
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function BottomStatusBar() {
   const [status, setStatus] = useState<ScanStatus>({
@@ -23,8 +22,8 @@ export default function BottomStatusBar() {
     const fetchStatus = async () => {
       try {
         const [devRes, alertRes] = await Promise.all([
-          fetch(`${API}/api/devices`),
-          fetch(`${API}/api/alerts`),
+          fetch(`${getRuntimeApiBase()}/api/devices`),
+          fetch(`${getRuntimeApiBase()}/api/alerts`),
         ]);
         if (devRes.ok && alertRes.ok) {
           const devices = await devRes.json();
@@ -47,7 +46,7 @@ export default function BottomStatusBar() {
   const triggerScan = async () => {
     setStatus((s) => ({ ...s, scanning: true }));
     try {
-      await fetch(`${API}/api/scan`, { method: "POST" });
+      await fetch(`${getRuntimeApiBase()}/api/scan`, { method: "POST" });
     } catch {
       /* noop */
     } finally {

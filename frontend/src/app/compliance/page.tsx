@@ -3,7 +3,7 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, FileUp, Gauge, RefreshCcw, ShieldCheck, TriangleAlert } from "lucide-react";
-import { api, type ComplianceAssessmentResult, type ComplianceFramework } from "@/lib/api";
+import { api, getRuntimeApiBase, type ComplianceAssessmentResult, type ComplianceFramework } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,8 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const defaultFramework = `[
   {
@@ -208,12 +206,16 @@ export default function CompliancePage() {
             <Button
               className="w-full"
               variant="secondary"
-              disabled={!assessment}
-              onClick={() => {
-                if (!assessment) return;
-                window.open(`${API_BASE}/api/compliance/report/${assessment.assessment_id}`, "_blank", "noopener,noreferrer");
-              }}
-            >
+                disabled={!assessment}
+                onClick={() => {
+                  if (!assessment) return;
+                  window.open(
+                    `${getRuntimeApiBase()}/api/compliance/report/${assessment.assessment_id}`,
+                    "_blank",
+                    "noopener,noreferrer"
+                  );
+                }}
+              >
               <CheckCircle2 className="h-4 w-4" />
               Download Assessment PDF
             </Button>

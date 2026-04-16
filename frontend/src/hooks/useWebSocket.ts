@@ -2,7 +2,23 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
+function resolveWsUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_WS_URL?.trim();
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (host.endsWith(".vercel.app")) {
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      return `${protocol}://${window.location.host}/_/backend/ws`;
+    }
+  }
+
+  if (configured && !configured.includes("<your-vercel-domain>")) {
+    return configured;
+  }
+
+  return "ws://localhost:8000/ws";
+}
 
 export interface WSEvent {
   event: string;
@@ -20,7 +36,7 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(resolveWsUrl());
     wsRef.current = ws;
 
     ws.onopen = () => setConnected(true);

@@ -2,7 +2,22 @@
  * Typed API client for the Shards backend.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export function getRuntimeApiBase(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (host.endsWith(".vercel.app")) {
+      return `${window.location.origin}/_/backend`;
+    }
+  }
+
+  if (configured && !configured.includes("<your-vercel-domain>")) {
+    return configured.replace(/\/$/, "");
+  }
+
+  return "http://localhost:8000";
+}
 
 export interface Device {
   mac: string;
@@ -106,7 +121,8 @@ export interface AttackSimulationResult {
 }
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const base = getRuntimeApiBase();
+  const res = await fetch(`${base}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",

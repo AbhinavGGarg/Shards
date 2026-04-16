@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { getRuntimeApiBase } from "@/lib/api";
 
 interface ComplianceUploadProps {
   onUploadComplete: () => void;
 }
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function ComplianceUpload({ onUploadComplete }: ComplianceUploadProps) {
   const [frameworkName, setFrameworkName] = useState("");
@@ -30,7 +29,7 @@ export default function ComplianceUpload({ onUploadComplete }: ComplianceUploadP
         return;
       }
 
-      const res = await fetch(`${API_BASE}/api/compliance/upload`, {
+      const res = await fetch(`${getRuntimeApiBase()}/api/compliance/upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
