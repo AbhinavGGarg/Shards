@@ -36,7 +36,12 @@ def _resolve_data_dir() -> Path:
 DATA_DIR = _resolve_data_dir()
 
 # Core settings
-FRAGMENTS_MOCK: bool = os.getenv("FRAGMENTS_MOCK", "0") == "1"
+# On Vercel/serverless, real LAN scans are not feasible, so default to mock telemetry
+# unless explicitly overridden.
+_mock_default = "1" if os.getenv("VERCEL") == "1" else "0"
+FRAGMENTS_MOCK: bool = (
+    os.getenv("SHARDS_MOCK", os.getenv("FRAGMENTS_MOCK", _mock_default)) == "1"
+)
 BIND_HOST: str = os.getenv("BIND_HOST", "127.0.0.1")
 BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
 
