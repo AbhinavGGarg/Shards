@@ -65,6 +65,46 @@ export interface Stats {
   last_scan: string | null;
 }
 
+export interface ComplianceFramework {
+  id: string;
+  name: string;
+  version: string;
+  controls_count: number;
+  upload_date: string;
+}
+
+export interface ComplianceAssessmentResult {
+  assessment_id: number;
+  framework: string;
+  controls_assessed: number;
+  compliant: number;
+  partial: number;
+  non_compliant: number;
+  report_path: string;
+}
+
+export interface ComplianceUploadResponse {
+  framework_id: string;
+  name: string;
+  controls_parsed: number;
+}
+
+export interface AttackSimulationStep {
+  from_ip: string;
+  from_host: string;
+  to_ip: string;
+  to_host: string;
+  method: string;
+  risk: number;
+}
+
+export interface AttackSimulationResult {
+  path: string[];
+  narration: string;
+  steps: AttackSimulationStep[];
+  source: string;
+}
+
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -118,9 +158,18 @@ export const api = {
   triggerIngest: () => fetchApi<{ status: string }>("/api/rag/ingest", { method: "POST" }),
 
   // Compliance
-  getFrameworks: () => fetchApi<Array<{ id: string; name: string }>>("/api/compliance/frameworks"),
+  uploadComplianceFramework: (payload: {
+    framework_name: string;
+    filename: string;
+    content: unknown;
+  }) =>
+    fetchApi<ComplianceUploadResponse>("/api/compliance/upload", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getFrameworks: () => fetchApi<ComplianceFramework[]>("/api/compliance/frameworks"),
   assessCompliance: (frameworkId: string) =>
-    fetchApi<{ assessment_id: string }>("/api/compliance/assess", {
+    fetchApi<ComplianceAssessmentResult>("/api/compliance/assess", {
       method: "POST",
       body: JSON.stringify({ framework_id: frameworkId }),
     }),
@@ -131,7 +180,7 @@ export const api = {
 
   // Attack simulation
   simulateAttack: (deviceId: string) =>
-    fetchApi<{ path: string[]; narration: string }>("/api/ai/attack-sim", {
+    fetchApi<AttackSimulationResult>("/api/ai/attack-sim", {
       method: "POST",
       body: JSON.stringify({ device_id: deviceId }),
     }),

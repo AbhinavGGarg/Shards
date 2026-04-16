@@ -1,236 +1,299 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { api, type Device } from "@/lib/api";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-interface AttackStep {
-  from_ip: string;
-  from_host: string;
-  to_ip: string;
-  to_host: string;
-  method: string;
-  risk: number;
-}
-
-interface SimResult {
-  path: string[];
-  narration: string;
-  steps: AttackStep[];
-  source: string;
-}
+import * as React from "react";
+import { motion } from "framer-motion";
+import { ArrowRight, CheckCircle2, Cpu, PlayCircle, ShieldCheck, ShieldOff, Sparkles } from "lucide-react";
+import { api, type AttackSimulationResult, type Device } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function SimulatePage() {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [selectedMac, setSelectedMac] = useState("");
-  const [simulating, setSimulating] = useState(false);
-  const [result, setResult] = useState<SimResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [devices, setDevices] = React.useState<Device[]>([]);
+  const [selectedMac, setSelectedMac] = React.useState<string>("");
+  const [simulation, setSimulation] = React.useState<AttackSimulationResult | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [simulating, setSimulating] = React.useState(false);
+  const [trusting, setTrusting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [status, setStatus] = React.useState<string | null>(null);
 
-  useEffect(() => {
-    api
-      .getDevices()
-      .then(setDevices)
-      .catch((e: Error) => setError(e.message || "Failed to load devices"));
-  }, []);
+  const selectedDevice = React.useMemo(
+    () => devices.find((device) => device.mac === selectedMac) ?? null,
+    [devices, selectedMac]
+  );
 
-  async function handleSimulate() {
-    if (!selectedMac) return;
-    setSimulating(true);
-    setResult(null);
+  const loadDevices = React.useCallback(async () => {
+    setLoading(true);
     setError(null);
+    try {
+      const data = await api.getDevices();
+      setDevices(data);
+      if (!selectedMac && data.length > 0) {
+        setSelectedMac(data[0].mac);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load devices");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedMac]);
+
+  React.useEffect(() => {
+    void loadDevices();
+  }, [loadDevices]);
+
+  React.useEffect(() => {
+    if (!status) return;
+    const timer = setTimeout(() => setStatus(null), 2600);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  const runSimulation = React.useCallback(async () => {
+    if (!selectedMac) {
+      setError("Select a device to start the simulation.");
+      return;
+    }
+
+    setSimulating(true);
+    setError(null);
+    setStatus(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/ai/attack-sim`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ device_id: selectedMac }),
-      });
-      if (!res.ok) throw new Error(`Simulation failed (${res.status})`);
-      const data: SimResult = await res.json();
-      setResult(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Simulation failed");
+      const result = await api.simulateAttack(selectedMac);
+      setSimulation(result);
+      setStatus("Simulation complete");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Simulation failed");
     } finally {
       setSimulating(false);
     }
-  }
+  }, [selectedMac]);
+
+  const trustSelectedDevice = React.useCallback(async () => {
+    if (!selectedDevice || selectedDevice.is_trusted) {
+      setStatus(selectedDevice?.is_trusted ? "Device is already trusted" : "Select a device first");
+      return;
+    }
+
+    setTrusting(true);
+    try {
+      await api.trustDevice(selectedDevice.mac);
+      await loadDevices();
+      setStatus(`${selectedDevice.hostname || selectedDevice.ip} marked as trusted`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to trust device");
+    } finally {
+      setTrusting(false);
+    }
+  }, [loadDevices, selectedDevice]);
 
   return (
-    <div>
-      <p
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: "10px",
-          textTransform: "uppercase",
-          letterSpacing: "0.16em",
-          color: "var(--text-ghost)",
-          marginBottom: "6px",
-        }}
-      >
-        Lateral Movement
-      </p>
-      <h2
-        style={{
-          fontFamily: "var(--font-sans)",
-          fontWeight: 700,
-          fontSize: "32px",
-          letterSpacing: "-0.02em",
-        }}
-      >
-        Attack Path Simulation
-      </h2>
-      <p
-        className="mt-2 mb-8"
-        style={{
-          fontFamily: "var(--font-serif)",
-          fontStyle: "italic",
-          fontSize: "16px",
-          color: "var(--text-secondary)",
-        }}
-      >
-        Select a device to simulate lateral movement from a compromised host.
-      </p>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Attack Simulation Lab</CardTitle>
+          <CardDescription>
+            Model potential lateral movement from any host and validate your containment playbook.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto_auto]">
+            <div className="space-y-2">
+              <Label htmlFor="device-select">Compromised source device</Label>
+              <Select value={selectedMac} onValueChange={setSelectedMac}>
+                <SelectTrigger id="device-select">
+                  <SelectValue placeholder="Choose source device" />
+                </SelectTrigger>
+                <SelectContent>
+                  {devices.length > 0 ? (
+                    devices.map((device) => (
+                      <SelectItem key={device.mac} value={device.mac}>
+                        {device.hostname || device.ip} · {device.ip}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="__none" disabled>
+                      No devices discovered yet
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
 
-      <div className="flex gap-3 mb-6">
-        <select
-          value={selectedMac}
-          onChange={(e) => setSelectedMac(e.target.value)}
-          className="frag-input flex-1"
-        >
-          <option value="">Select a device…</option>
-          {devices.map((d) => (
-            <option key={d.mac} value={d.mac}>
-              {d.ip} — {d.hostname || d.vendor || "Unknown"} (Risk: {d.risk_score})
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={handleSimulate}
-          disabled={!selectedMac || simulating}
-          className="frag-btn-primary"
-        >
-          {simulating ? "Simulating…" : "Simulate Compromise"}
-        </button>
-      </div>
-
-      {error && (
-        <div
-          className="mb-4 px-4 py-3 rounded-xl"
-          style={{
-            background: "color-mix(in srgb, var(--status-critical) 12%, transparent)",
-            border: "1px solid color-mix(in srgb, var(--status-critical) 35%, transparent)",
-            color: "var(--status-critical)",
-            fontFamily: "var(--font-mono)",
-            fontSize: "12px",
-          }}
-        >
-          ◆ {error}
-        </div>
-      )}
-
-      {result && (
-        <div className="space-y-4">
-          {/* Attack path visualization */}
-          {result.steps.length > 0 && (
-            <div className="frag-card">
-              <h3
-                className="mb-4"
-                style={{
-                  fontFamily: "var(--font-sans)",
-                  fontWeight: 600,
-                  fontSize: "13px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                }}
-              >
-                Attack Path · {result.steps.length} hops
-              </h3>
-              <div className="space-y-3">
-                {result.steps.map((step, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div
-                      className="px-3 py-2 rounded-md"
-                      style={{
-                        background: "var(--black)",
-                        color: "var(--text-primary)",
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "12px",
-                        border: "1px solid color-mix(in srgb, var(--bg-border) 40%, transparent)",
-                      }}
-                    >
-                      {step.from_ip}
-                    </div>
-                    <div className="flex flex-col items-center min-w-0 flex-1">
-                      <span style={{ color: "var(--status-critical)", fontSize: "20px", lineHeight: 1 }}>→</span>
-                      <span
-                        className="truncate max-w-full"
-                        style={{
-                          fontFamily: "var(--font-mono)",
-                          fontSize: "10px",
-                          color: "var(--text-ghost)",
-                          marginTop: "2px",
-                        }}
-                      >
-                        {step.method}
-                      </span>
-                    </div>
-                    <div
-                      className="px-3 py-2 rounded-md"
-                      style={{
-                        background: "var(--black)",
-                        color: "var(--status-critical)",
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "12px",
-                        border: "1px solid color-mix(in srgb, var(--status-critical) 30%, transparent)",
-                      }}
-                    >
-                      {step.to_ip}
-                    </div>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "10px",
-                        color: "var(--text-ghost)",
-                      }}
-                    >
-                      Risk {step.risk}
-                    </span>
-                  </div>
-                ))}
+            <div className="space-y-2">
+              <Label>Source risk</Label>
+              <div className="flex h-10 items-center rounded-lg border border-[color:var(--border-soft)] bg-[color:var(--bg-panel)] px-3">
+                {selectedDevice ? (
+                  <Badge
+                    variant={
+                      selectedDevice.risk_score >= 70
+                        ? "critical"
+                        : selectedDevice.risk_score >= 40
+                          ? "warning"
+                          : "success"
+                    }
+                  >
+                    {Math.round(selectedDevice.risk_score)}
+                  </Badge>
+                ) : (
+                  <Badge variant="muted">Awaiting selection</Badge>
+                )}
               </div>
             </div>
-          )}
 
-          {/* Narration */}
-          <div className="frag-card">
-            <h3
-              className="mb-4"
-              style={{
-                fontFamily: "var(--font-sans)",
-                fontWeight: 600,
-                fontSize: "13px",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-              }}
-            >
-              Attack Narration
-            </h3>
-            <div
-              className="whitespace-pre-wrap"
-              style={{
-                fontFamily: "var(--font-sans)",
-                fontSize: "13px",
-                lineHeight: 1.7,
-                color: "var(--text-secondary)",
-              }}
-            >
-              {result.narration}
+            <div className="flex items-end">
+              <Button className="w-full" onClick={() => void runSimulation()} disabled={simulating || loading}>
+                <PlayCircle className="h-4 w-4" />
+                {simulating ? "Simulating..." : "Run Simulation"}
+              </Button>
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                className="w-full"
+                variant="secondary"
+                onClick={() => void trustSelectedDevice()}
+                disabled={trusting || !selectedDevice}
+              >
+                {selectedDevice?.is_trusted ? <ShieldCheck className="h-4 w-4" /> : <ShieldOff className="h-4 w-4" />}
+                {trusting ? "Saving..." : selectedDevice?.is_trusted ? "Trusted" : "Trust"}
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--text-ghost)]">
+            <Badge variant={loading ? "warning" : "success"}>{loading ? "Syncing inventory" : "Ready"}</Badge>
+            <span>Simulations use current ports, trust status, CVEs, and topology edges.</span>
+          </div>
+
+          {error && <p className="text-sm text-[color:var(--status-critical)]">{error}</p>}
+          {status && <p className="text-sm text-[color:var(--status-info)]">{status}</p>}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 xl:grid-cols-[1.45fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Lateral Movement Path</CardTitle>
+            <CardDescription>
+              {simulation
+                ? `${simulation.steps.length} hop(s) identified from selected source.`
+                : "Run a simulation to generate an attack path and exploit chain."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Hop</TableHead>
+                  <TableHead>From</TableHead>
+                  <TableHead>To</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Risk</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(simulation?.steps.length
+                  ? simulation.steps
+                  : [
+                      {
+                        from_ip: "—",
+                        from_host: "No simulation yet",
+                        to_ip: "—",
+                        to_host: "Select a source device",
+                        method: "Run simulation",
+                        risk: 0,
+                      },
+                    ]
+                ).map((step, index) => (
+                  <TableRow key={`${step.from_ip}-${step.to_ip}-${index}`}>
+                    <TableCell className="font-mono text-xs">#{index + 1}</TableCell>
+                    <TableCell>
+                      <p className="font-medium">{step.from_host || "Unknown"}</p>
+                      <p className="text-xs text-[color:var(--text-ghost)]">{step.from_ip}</p>
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-medium">{step.to_host || "Unknown"}</p>
+                      <p className="text-xs text-[color:var(--text-ghost)]">{step.to_ip}</p>
+                    </TableCell>
+                    <TableCell className="text-[color:var(--text-secondary)]">{step.method}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={step.risk >= 70 ? "critical" : step.risk >= 40 ? "warning" : "success"}
+                      >
+                        {Math.round(step.risk)}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>AI Narration</CardTitle>
+            <CardDescription>Explainability output generated from the simulation engine.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <motion.div
+              layout
+              className="rounded-xl border border-[color:var(--border-soft)] bg-[color:var(--bg-panel)] p-4"
+            >
+              <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-ghost)]">Narrative summary</p>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[color:var(--text-secondary)]">
+                {simulation?.narration ||
+                  "No simulation has been executed. Choose a source host and run simulation to receive an AI explanation of attack progression and impact."}
+              </p>
+            </motion.div>
+
+            <div className="rounded-xl border border-[color:var(--border-soft)] bg-[color:var(--bg-panel)] p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-ghost)]">Response actions</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => void runSimulation()} disabled={simulating || !selectedMac}>
+                  <Sparkles className="h-4 w-4" />
+                  Re-run
+                </Button>
+                <Button variant="secondary" onClick={() => void loadDevices()} disabled={loading}>
+                  <Cpu className="h-4 w-4" />
+                  Refresh Inventory
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setSimulation(null);
+                    setStatus("Simulation panel reset");
+                  }}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Clear
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[color:var(--border-soft)] bg-[color:var(--bg-panel)] p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-ghost)]">Attack chain</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                {simulation?.path?.length ? (
+                  simulation.path.map((node, index) => (
+                    <React.Fragment key={`${node}-${index}`}>
+                      <Badge variant="muted">{node.slice(0, 10)}</Badge>
+                      {index < simulation.path.length - 1 && <ArrowRight className="h-3.5 w-3.5 text-[color:var(--text-ghost)]" />}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  <span className="text-[color:var(--text-secondary)]">Chain appears here after simulation.</span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
