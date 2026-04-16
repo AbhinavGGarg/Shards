@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for Fragments backend tests."""
+"""Shared pytest fixtures for Shards backend tests."""
 
 import json
 import os

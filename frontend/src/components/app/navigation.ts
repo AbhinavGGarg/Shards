@@ -18,7 +18,7 @@ export type NavItem = {
 };
 
 export const primaryNav: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: Activity, description: "Operational summary" },
+  { href: "/dashboard", label: "Dashboard", icon: Activity, description: "Operational summary" },
   { href: "/devices", label: "Devices", icon: Shield, description: "Asset inventory" },
   { href: "/threats", label: "Threats", icon: Radar, description: "Live detections" },
   { href: "/simulate", label: "Simulate", icon: FlaskConical, description: "Attack simulation" },
@@ -32,7 +32,7 @@ export const secondaryNav: NavItem[] = [
 ];
 
 export const pageTitles: Record<string, string> = {
-  "/": "Security Dashboard",
+  "/dashboard": "Security Dashboard",
   "/devices": "Device Inventory",
   "/threats": "Threat Operations",
   "/simulate": "Attack Simulation",

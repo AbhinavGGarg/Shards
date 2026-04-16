@@ -1,4 +1,4 @@
-# Fragments
+# Shards
 
 **AI-powered network security platform** — discover devices on your LAN, score their risk, simulate lateral movement, chat with a RAG analyst about your scan, assess compliance frameworks, and export PDF reports.
 
@@ -75,7 +75,7 @@ All are optional except `ANTHROPIC_API_KEY` (required for AI features in live mo
 | `BACKEND_PORT` | `8000` | Backend port |
 | `SCAN_SUBNET` | `192.168.1.0/24` | CIDR to scan in live mode |
 | `SCAN_INTERVAL` | `60` | Seconds between background scans |
-| `DB_PATH` | `data/fragments.db` | SQLite path |
+| `DB_PATH` | `data/shards.db` | SQLite path |
 | `CHROMA_PERSIST_DIR` | `data/chroma` | ChromaDB persistence directory |
 | `ANTHROPIC_API_KEY` | — | Required for Claude-powered analyze / attack-sim / RAG chat |
 | `LLM_MODEL` | `claude-sonnet-4-20250514` | Anthropic model ID |
@@ -106,7 +106,7 @@ The Anthropic API is still used for AI endpoints in mock mode if `ANTHROPIC_API_
 ## Project layout
 
 ```
-fragments/
+shards/
 ├── backend/
 │   ├── main.py              # FastAPI app
 │   ├── scanner/             # ARP, port, OS, OUI
@@ -119,7 +119,7 @@ fragments/
 │   └── src/app/             # Next.js 16 App Router
 ├── data/
 │   ├── oui.txt              # Pre-cached IEEE OUI database
-│   ├── fragments.db         # SQLite (created on first run)
+│   ├── shards.db         # SQLite (created on first run)
 │   └── chroma/              # Vector store (created on first run)
 └── specs/                   # Product spec, plan, tasks, constitution
 ```

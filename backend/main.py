@@ -1,4 +1,4 @@
-"""Fragments — FastAPI application entry point."""
+"""Shards — FastAPI application entry point."""
 
 import asyncio
 import json
@@ -64,16 +64,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Initialize resources on startup, clean up on shutdown."""
     global _background_scanner_task
     init_db()
-    logger.info("Fragments backend started")
+    logger.info("Shards backend started")
     _background_scanner_task = asyncio.create_task(_background_scan_loop())
     yield
     if _background_scanner_task:
         _background_scanner_task.cancel()
-    logger.info("Fragments backend shutting down")
+    logger.info("Shards backend shutting down")
 
 
 app = FastAPI(
-    title="Fragments",
+    title="Shards",
     description="AI-Powered Network Security Platform",
     version="0.1.0",
     lifespan=lifespan,
@@ -93,7 +93,7 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Health check endpoint."""
-    return {"status": "ok", "service": "fragments"}
+    return {"status": "ok", "service": "shards"}
 
 
 # --- Scanning ---

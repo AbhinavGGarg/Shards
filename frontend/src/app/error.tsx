@@ -10,7 +10,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[Fragments] Unhandled error:", error);
+    console.error("[Shards] Unhandled error:", error);
   }, [error]);
 
   return (

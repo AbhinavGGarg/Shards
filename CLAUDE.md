@@ -1,4 +1,4 @@
-# Fragments Development Guidelines
+# Shards Development Guidelines
 
 Auto-generated from all feature plans. Last updated: 2026-04-11
 
@@ -112,7 +112,7 @@ docker-compose up --build
 ## Recent Changes
 
 1. **Project initialization** — Created spec, plan, tasks, constitution, and checklist documents
-2. **Name change** — Project renamed from NetScope to Fragments
+2. **Name change** — Project renamed from NetScope to Shards
 3. **Tech stack update** — Frontend changed from React+Vite to Next.js 14 App Router
 
 <!-- MANUAL ADDITIONS START -->

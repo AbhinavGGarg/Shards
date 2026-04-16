@@ -66,7 +66,7 @@ async def generate_security_report() -> str:
 
     # ── Title Page ──
     elements.append(Spacer(1, 2 * inch))
-    elements.append(Paragraph("Fragments", title_style))
+    elements.append(Paragraph("Shards", title_style))
     elements.append(Paragraph("Network Security Assessment Report", styles["Heading2"]))
     elements.append(Spacer(1, 0.5 * inch))
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")

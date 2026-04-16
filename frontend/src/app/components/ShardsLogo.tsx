@@ -1,16 +1,16 @@
 "use client";
 
-interface FragmentsLogoProps {
+interface ShardsLogoProps {
   size?: number;
   variant?: "icon" | "wordmark" | "wordmark-accent";
   className?: string;
 }
 
-export default function FragmentsLogo({
+export default function ShardsLogo({
   size = 32,
   variant = "wordmark",
   className = "",
-}: FragmentsLogoProps) {
+}: ShardsLogoProps) {
   const icon = (
     <span
       className="inline-flex items-center justify-center rounded-xl"

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const SETTINGS_KEY = "fragments-workspace-settings-v1";
+const SETTINGS_KEY = "shards-workspace-settings-v1";
 
 type WorkspaceSettings = {
   workspaceName: string;
@@ -42,15 +42,7 @@ export default function SettingsPage() {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (!stored) return;
       const parsed = JSON.parse(stored) as WorkspaceSettings;
-      const normalized: WorkspaceSettings = {
-        ...parsed,
-        workspaceName:
-          parsed.workspaceName?.trim().toLowerCase() === "fragments soc"
-            ? "Shards SOC"
-            : parsed.workspaceName,
-      };
-      setSettings(normalized);
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalized));
+      setSettings(parsed);
     } catch {
       // ignore invalid local storage
     }

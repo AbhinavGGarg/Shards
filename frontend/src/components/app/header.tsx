@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Bell, LogOut, Rocket, ScanLine, Search, Settings2, UserCircle2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
+import { clearSession, readSession } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +47,7 @@ type HeaderSettings = {
   slackWebhook: boolean;
 };
 
-const SETTINGS_KEY = "fragments-header-settings-v1";
+const SETTINGS_KEY = "shards-header-settings-v1";
 
 type ActionDef = {
   label: string;
@@ -55,7 +56,7 @@ type ActionDef = {
 };
 
 function contextActionForPath(pathname: string): ActionDef {
-  if (pathname === "/") {
+  if (pathname === "/dashboard") {
     return {
       label: "Run Scan",
       icon: ScanLine,
@@ -131,19 +132,23 @@ export function AppHeader() {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (!stored) return;
       const parsed = JSON.parse(stored) as HeaderSettings;
-      const normalized: HeaderSettings = {
-        ...parsed,
-        workspaceName:
-          parsed.workspaceName?.trim().toLowerCase() === "fragments soc"
-            ? "Shards SOC"
-            : parsed.workspaceName,
-      };
-      setSettings(normalized);
-      setDraftSettings(normalized);
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalized));
+      setSettings(parsed);
+      setDraftSettings(parsed);
     } catch {
       // ignore invalid storage
     }
+  }, []);
+
+  React.useEffect(() => {
+    const session = readSession();
+    if (!session?.name) return;
+    const initials = session.name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("");
+    if (initials) setOperatorTag(initials);
   }, []);
 
   React.useEffect(() => {
@@ -305,8 +310,9 @@ export function AppHeader() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onSelect={() => {
-                    setOperatorTag("GU");
-                    setStatusMessage("Signed out from operator session");
+                    clearSession();
+                    setStatusMessage("Signed out");
+                    router.push("/auth");
                   }}
                 >
                   <LogOut className="mr-2 h-4 w-4" />

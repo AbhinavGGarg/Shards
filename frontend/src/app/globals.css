@@ -18,7 +18,7 @@
 }
 
 /* ============================================================
-   Fragments Design System v2.0
+   Shards Design System v2.0
    ============================================================ */
 :root {
   /* Core palette */
@@ -61,7 +61,7 @@
   --font-serif: 'Instrument Serif', serif;
 
   /* ----------------------------------------------------------
-     Legacy aliases (mapped to Fragments tokens) — kept so
+     Legacy aliases (mapped to Shards tokens) — kept so
      existing components keep rendering without edits.
      ---------------------------------------------------------- */
   --bg-primary: var(--black);

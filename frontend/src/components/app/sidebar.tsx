@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
-import FragmentsLogo from "@/app/components/FragmentsLogo";
+import ShardsLogo from "@/app/components/ShardsLogo";
 import { primaryNav, secondaryNav } from "./navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,14 +22,14 @@ function NavContent({ mobile = false, onNavigate }: { mobile?: boolean; onNaviga
   return (
     <div className={cn("flex h-full flex-col", mobile ? "min-h-[70vh]" : "")}> 
       <div className="px-4 py-5">
-        <Link href="/" className="inline-flex" onClick={onNavigate}>
-          <FragmentsLogo size={34} variant="wordmark-accent" />
+        <Link href="/dashboard" className="inline-flex" onClick={onNavigate}>
+          <ShardsLogo size={34} variant="wordmark-accent" />
         </Link>
       </div>
 
       <nav className="px-3 space-y-1">
         {primaryNav.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           return (
             <Link

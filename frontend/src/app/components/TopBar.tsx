@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import FragmentsLogo from "./FragmentsLogo";
+import ShardsLogo from "./ShardsLogo";
 
 export default function TopBar() {
   return (
@@ -14,7 +14,7 @@ export default function TopBar() {
       }}
     >
       <Link href="/" className="flex-shrink-0">
-        <FragmentsLogo size={34} variant="wordmark-accent" />
+        <ShardsLogo size={34} variant="wordmark-accent" />
       </Link>
 
       <div

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const PROFILE_KEY = "fragments-account-profile-v1";
+const PROFILE_KEY = "shards-account-profile-v1";
 
 type AccountProfile = {
   name: string;
@@ -36,7 +36,7 @@ export default function AccountPage() {
     { id: "s1", device: "MacBook Pro · Chrome", location: "San Francisco, US", active: true },
     { id: "s2", device: "iPhone · Safari", location: "San Francisco, US", active: false },
   ]);
-  const [apiToken, setApiToken] = React.useState("frag_live_9skL9x2P7R48TnQe");
+  const [apiToken, setApiToken] = React.useState("shards_live_9skL9x2P7R48TnQe");
   const [showToken, setShowToken] = React.useState(false);
   const [status, setStatus] = React.useState<string | null>(null);
 
@@ -64,7 +64,7 @@ export default function AccountPage() {
 
   const regenerateToken = React.useCallback(() => {
     const suffix = Math.random().toString(36).slice(2, 18);
-    setApiToken(`frag_live_${suffix}`);
+    setApiToken(`shards_live_${suffix}`);
     setStatus("API token rotated");
   }, []);
 

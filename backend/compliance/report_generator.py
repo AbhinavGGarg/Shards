@@ -56,7 +56,7 @@ def generate_compliance_report(
 
     # --- Title Page ---
     elements.append(Spacer(1, 2 * inch))
-    elements.append(Paragraph("Fragments", title_style))
+    elements.append(Paragraph("Shards", title_style))
     elements.append(Paragraph("Compliance Assessment Report", styles["Heading2"]))
     elements.append(Spacer(1, 0.5 * inch))
     elements.append(Paragraph(f"<b>Framework:</b> {framework_name}", body_style))

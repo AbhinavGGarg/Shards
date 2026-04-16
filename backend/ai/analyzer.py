@@ -8,7 +8,7 @@ from backend.ai.rag.retriever import retrieve, build_context
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are Fragments AI, a network security analyst assistant. You analyze network scan data and provide actionable security insights.
+SYSTEM_PROMPT = """You are Shards AI, a network security analyst assistant. You analyze network scan data and provide actionable security insights.
 
 Your capabilities:
 - Assess device risk based on open ports, services, OS versions, and CVEs

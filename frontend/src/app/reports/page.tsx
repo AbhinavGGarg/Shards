@@ -24,7 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const HISTORY_KEY = "fragments-report-history-v1";
+const HISTORY_KEY = "shards-report-history-v1";
 
 type ReportStep = "overview" | "configuration" | "preview" | "generate" | "history";
 

@@ -1,4 +1,4 @@
-"""Environment variable management for Fragments."""
+"""Environment variable management for Shards."""
 
 import os
 import logging
@@ -19,7 +19,7 @@ def _resolve_data_dir() -> Path:
     if configured:
         preferred = Path(configured)
     elif os.getenv("VERCEL") == "1":
-        preferred = Path("/tmp/fragments-data")
+        preferred = Path("/tmp/shards-data")
     else:
         preferred = PROJECT_ROOT / "data"
 
@@ -27,7 +27,7 @@ def _resolve_data_dir() -> Path:
         preferred.mkdir(parents=True, exist_ok=True)
         return preferred
     except Exception as e:
-        fallback = Path("/tmp/fragments-data")
+        fallback = Path("/tmp/shards-data")
         fallback.mkdir(parents=True, exist_ok=True)
         logger.warning("Falling back to %s for data directory: %s", fallback, e)
         return fallback
@@ -41,7 +41,7 @@ BIND_HOST: str = os.getenv("BIND_HOST", "127.0.0.1")
 BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
 
 # Database
-DB_PATH: str = os.getenv("DB_PATH", str(DATA_DIR / "fragments.db"))
+DB_PATH: str = os.getenv("DB_PATH", str(DATA_DIR / "shards.db"))
 
 # Scanning
 SCAN_INTERVAL: int = int(os.getenv("SCAN_INTERVAL", "60"))

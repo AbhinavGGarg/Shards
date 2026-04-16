@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 _client: chromadb.ClientAPI | None = None
 _collection: Any = None
 
-COLLECTION_NAME = "fragments_network"
+COLLECTION_NAME = "shards_network"
 
 
 def _get_collection() -> Any:

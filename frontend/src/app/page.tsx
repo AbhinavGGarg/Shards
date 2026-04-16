@@ -1,414 +1,243 @@
 "use client";
 
-import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import * as React from "react";
 import { motion } from "framer-motion";
 import {
-  AlertTriangle,
+  ArrowRight,
+  Bot,
   CheckCircle2,
+  ChevronRight,
+  Eye,
+  Network,
   Radar,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
-  TerminalSquare,
+  Zap,
 } from "lucide-react";
-import { useNetworkData } from "@/hooks/useNetworkData";
-import { useWebSocket } from "@/hooks/useWebSocket";
-import { api, type Alert, type TopologyNode } from "@/lib/api";
-import NetworkGraph from "./components/NetworkGraph";
-import DeviceDetailPanel from "./components/DeviceDetailPanel";
+import ShardsLogo from "./components/ShardsLogo";
+import { writeSession } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-function severityColor(severity: string): "critical" | "warning" | "success" | "default" {
-  const s = severity.toLowerCase();
-  if (s === "critical" || s === "high") return "critical";
-  if (s === "medium") return "warning";
-  if (s === "low") return "success";
-  return "default";
-}
+const featureCards = [
+  {
+    icon: Radar,
+    title: "Real-time Threat Detection",
+    description: "Continuously ingest telemetry and identify anomalies before they escalate into incidents.",
+  },
+  {
+    icon: Bot,
+    title: "AI-Powered Analysis",
+    description: "Use AI-assisted reasoning to explain detections and prioritize high-impact response actions.",
+  },
+  {
+    icon: Network,
+    title: "Full Device Visibility",
+    description: "Map every endpoint, surface exposed ports, and monitor posture drift across your network graph.",
+  },
+  {
+    icon: Zap,
+    title: "Automated Response",
+    description: "Trigger isolation, block policies, and deep scans from one operational command surface.",
+  },
+];
 
-export default function DashboardPage() {
+const steps = [
+  {
+    title: "Connect your network",
+    description: "Link your environment and begin collecting secure telemetry in minutes.",
+  },
+  {
+    title: "Monitor threats",
+    description: "Track incidents, vulnerable assets, and anomaly trends in real time.",
+  },
+  {
+    title: "Respond with AI",
+    description: "Execute guided containment and remediation actions with confidence.",
+  },
+];
+
+export default function LandingPage() {
   const router = useRouter();
-  const { topology, devices, stats, loading, error, refresh } = useNetworkData();
-  const { connected, on } = useWebSocket();
 
-  const [alerts, setAlerts] = React.useState<Alert[]>([]);
-  const [scanLoading, setScanLoading] = React.useState(false);
-  const [selectedDevice, setSelectedDevice] = React.useState<TopologyNode | null>(null);
-  const [isolated, setIsolated] = React.useState<Set<string>>(new Set());
-  const [blockedIps, setBlockedIps] = React.useState<Set<string>>(new Set());
-
-  const loadAlerts = React.useCallback(async () => {
-    try {
-      const data = await api.getAlerts();
-      setAlerts(data);
-    } catch {
-      setAlerts([]);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    loadAlerts();
-  }, [loadAlerts]);
-
-  React.useEffect(() => {
-    const unsubs = [
-      on("scan_complete", () => {
-        refresh();
-        loadAlerts();
-      }),
-      on("alert", () => {
-        loadAlerts();
-      }),
-      on("device_joined", () => refresh()),
-      on("port_change", () => refresh()),
-      on("device_left", () => refresh()),
-    ];
-    return () => unsubs.forEach((u) => u());
-  }, [loadAlerts, on, refresh]);
-
-  const runScan = React.useCallback(async () => {
-    if (scanLoading) return;
-    setScanLoading(true);
-    try {
-      await api.triggerScan();
-      await Promise.all([refresh(), loadAlerts()]);
-    } finally {
-      setScanLoading(false);
-    }
-  }, [loadAlerts, refresh, scanLoading]);
-
-  const acknowledge = React.useCallback(async (id: number) => {
-    await api.acknowledgeAlert(id);
-    await loadAlerts();
-  }, [loadAlerts]);
-
-  const highRiskDevices = React.useMemo(
-    () => [...devices].sort((a, b) => b.risk_score - a.risk_score).slice(0, 6),
-    [devices]
-  );
-
-  const criticalCount = alerts.filter((a) => ["critical", "high"].includes(a.severity.toLowerCase()) && !a.acknowledged).length;
-  const warningCount = alerts.filter((a) => a.severity.toLowerCase() === "medium" && !a.acknowledged).length;
-  const safeCount = Math.max((stats?.total_devices ?? devices.length) - criticalCount - warningCount, 0);
-
-  const telemetryStatus = connected ? "Live stream active" : "Polling mode active";
+  const openDemo = React.useCallback(() => {
+    writeSession({
+      email: "demo@shards.app",
+      name: "Demo Analyst",
+      role: "analyst",
+      loginAt: new Date().toISOString(),
+    });
+    router.push("/dashboard");
+  }, [router]);
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Risk Score" value={(stats?.avg_risk_score ?? 0).toFixed(1)} icon={ShieldAlert} accent="warning" description="Average device risk" />
-        <MetricCard title="Monitored Devices" value={String(stats?.total_devices ?? devices.length)} icon={Radar} accent="default" description="Live asset inventory" />
-        <MetricCard title="Critical Alerts" value={String(criticalCount)} icon={AlertTriangle} accent="critical" description="Needs immediate triage" />
-        <MetricCard title="System Health" value={connected ? "Healthy" : "Degraded"} icon={connected ? CheckCircle2 : ShieldAlert} accent={connected ? "success" : "warning"} description={telemetryStatus} />
-      </div>
+    <div className="relative min-h-screen overflow-hidden bg-[color:var(--bg-deep)] text-[color:var(--text-primary)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_-10%,rgba(42,216,255,0.2),transparent_36%),radial-gradient(circle_at_88%_8%,rgba(255,80,101,0.15),transparent_34%)]" />
 
-      <div className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
-        <Card className="overflow-hidden">
-          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-            <div>
-              <CardTitle>Network Command Surface</CardTitle>
-              <CardDescription>Live topology with actionable incident controls.</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={connected ? "success" : "warning"}>{telemetryStatus}</Badge>
-              <Button onClick={runScan} disabled={scanLoading}>
-                <Radar className="h-4 w-4" />
-                {scanLoading ? "Scanning..." : "Run Scan"}
+      <header className="relative z-10 border-b border-white/10 bg-[color:var(--bg-deep)]/85 backdrop-blur">
+        <div className="mx-auto flex max-w-[1240px] items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <Link href="/" className="inline-flex items-center">
+            <ShardsLogo size={34} variant="wordmark-accent" />
+          </Link>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={() => router.push("/auth")}>Sign In</Button>
+            <Button onClick={() => router.push("/auth")}>Get Started</Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="relative z-10">
+        <section className="mx-auto grid max-w-[1240px] gap-8 px-4 pb-14 pt-14 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:px-8 lg:pb-20 lg:pt-20">
+          <div>
+            <Badge variant="default" className="mb-4">AI Security Operations Platform</Badge>
+            <h1 className="text-4xl font-semibold leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
+              Shards
+            </h1>
+            <p className="mt-4 text-xl font-medium text-[color:var(--status-info)]">
+              AI-powered network security and threat intelligence
+            </p>
+            <p className="mt-4 max-w-xl text-base leading-7 text-[color:var(--text-secondary)] sm:text-lg">
+              Monitor, detect, and respond to threats in real time with a unified cyber defense workspace designed for fast-moving security teams.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Button size="lg" onClick={() => router.push("/auth")}>
+                Get Started
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button size="lg" variant="secondary" onClick={openDemo}>
+                <Eye className="h-4 w-4" />
+                View Demo
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <NetworkGraph
-              data={topology}
-              mode={criticalCount > 0 ? "incident" : "normal"}
-              suspiciousNodes={new Set(alerts.map((a) => a.device_mac).filter(Boolean) as string[])}
-              attackLinkKeys={new Set<string>()}
-              onNodeHover={() => null}
-              onNodeClick={(node) => setSelectedDevice(node)}
-              height={460}
-            />
 
-            <div className="grid gap-3 md:grid-cols-3">
-              <ActionTile
-                title="Critical"
-                value={criticalCount}
-                helper="Immediate response"
-                tone="critical"
-                actionLabel="Review Threats"
-                onAction={() => router.push("/threats")}
-              />
-              <ActionTile
-                title="Warnings"
-                value={warningCount}
-                helper="Investigate soon"
-                tone="warning"
-                actionLabel="Run Scan"
-                onAction={() => void runScan()}
-              />
-              <ActionTile
-                title="Safe Assets"
-                value={safeCount}
-                helper="No active issues"
-                tone="success"
-                actionLabel="View Devices"
-                onAction={() => router.push("/devices")}
-              />
+            <div className="mt-8 flex flex-wrap items-center gap-4 text-sm text-[color:var(--text-ghost)]">
+              <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-4 w-4 text-[color:var(--status-healthy)]" /> SOC ready</span>
+              <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-4 w-4 text-[color:var(--status-healthy)]" /> Enterprise architecture</span>
+              <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-4 w-4 text-[color:var(--status-healthy)]" /> Real-time telemetry</span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>AI Operations Assistant</CardTitle>
-            <CardDescription>
-              {criticalCount > 0
-                ? "Threats detected. Prioritize containment and credential integrity checks."
-                : "All systems nominal. Continue scheduled scans and compliance reviews."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-xl border border-[color:var(--border-soft)] bg-[color:var(--bg-panel)] p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-ghost)]">Assistant reasoning</p>
-              <ul className="mt-3 space-y-2 text-sm text-[color:var(--text-secondary)]">
-                <li className="flex gap-2"><Sparkles className="h-4 w-4 mt-0.5 text-[color:var(--status-info)]" /> Correlating alert stream with topology changes and open-port drift.</li>
-                <li className="flex gap-2"><TerminalSquare className="h-4 w-4 mt-0.5 text-[color:var(--status-info)]" /> Prioritizing hosts with repeated anomalies and high-risk services.</li>
-              </ul>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            className="rounded-2xl border border-white/10 bg-[linear-gradient(160deg,rgba(13,21,36,0.96),rgba(7,12,21,0.98))] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.42)]"
+          >
+            <p className="mb-3 text-xs uppercase tracking-[0.14em] text-[color:var(--text-ghost)]">Product Preview</p>
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <PreviewStat label="Risk score" value="24.8" tone="warning" />
+                <PreviewStat label="Active alerts" value="6" tone="critical" />
+                <PreviewStat label="Protected assets" value="182" tone="success" />
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#0a1220] p-3">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-medium">Incident Spotlight</p>
+                  <Badge variant="critical">high</Badge>
+                </div>
+                <p className="text-sm text-[color:var(--text-secondary)]">
+                  Suspicious lateral movement detected between `gateway` and `db-prod`.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button className="rounded-md border border-[color:var(--status-critical)]/40 px-2.5 py-1 text-xs text-[color:var(--status-critical)]">Isolate</button>
+                  <button className="rounded-md border border-[color:var(--status-info)]/40 px-2.5 py-1 text-xs text-[color:var(--status-info)]">Run Deep Scan</button>
+                </div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#0a1220] p-3">
+                <p className="mb-2 text-xs uppercase tracking-[0.14em] text-[color:var(--text-ghost)]">Threat stream</p>
+                <div className="space-y-2 text-sm">
+                  <PreviewEvent severity="critical" text="Credential relay pattern detected" />
+                  <PreviewEvent severity="warning" text="New unmanaged endpoint discovered" />
+                  <PreviewEvent severity="success" text="Policy sync completed" />
+                </div>
+              </div>
             </div>
+          </motion.div>
+        </section>
 
-            <div className="space-y-2">
-              <Button className="w-full justify-start" variant="secondary" onClick={() => void runScan()}>
-                <ShieldCheck className="h-4 w-4" /> Run Deep Verification Scan
-              </Button>
-              <Button className="w-full justify-start" variant="secondary" onClick={() => router.push("/reports")}> 
-                <Sparkles className="h-4 w-4" /> Generate Executive Report
-              </Button>
-              <Button className="w-full justify-start" variant="secondary" onClick={() => router.push("/simulate")}> 
-                <Radar className="h-4 w-4" /> Launch Attack Simulation
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Alerts Overview</CardTitle>
-            <CardDescription>Prioritized detection queue with acknowledgement flow.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(alerts.length > 0
-                  ? alerts.slice(0, 8)
-                  : [
-                      {
-                        id: -1,
-                        severity: "low",
-                        alert_type: "telemetry",
-                        message: "No active alerts. Continue monitoring baseline health.",
-                        timestamp: new Date().toISOString(),
-                        acknowledged: true,
-                        device_mac: null,
-                      },
-                    ]
-                ).map((alert) => (
-                  <TableRow key={alert.id}>
-                    <TableCell>
-                      <Badge variant={severityColor(alert.severity)}>{alert.severity}</Badge>
-                    </TableCell>
-                    <TableCell className="capitalize">{alert.alert_type.replaceAll("_", " ")}</TableCell>
-                    <TableCell className="text-[color:var(--text-secondary)]">{alert.message}</TableCell>
-                    <TableCell className="text-[color:var(--text-ghost)] text-xs">
-                      {new Date(alert.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {alert.id > 0 ? (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void acknowledge(alert.id)}
-                          disabled={alert.acknowledged}
-                        >
-                          {alert.acknowledged ? "Acknowledged" : "Acknowledge"}
-                        </Button>
-                      ) : (
-                        <Badge variant="success">Nominal</Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {error && (
-              <p className="mt-3 text-sm text-[color:var(--status-critical)]">
-                {error} — data may be partially unavailable. Scan action still works.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Most Vulnerable Devices</CardTitle>
-            <CardDescription>Top assets requiring hardening.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {(highRiskDevices.length > 0
-              ? highRiskDevices
-              : [
-                  {
-                    mac: "demo",
-                    ip: "No devices yet",
-                    hostname: "Run a scan to populate inventory",
-                    vendor: "",
-                    os: "",
-                    device_type: "",
-                    open_ports: {},
-                    services: {},
-                    risk_score: 0,
-                    is_trusted: false,
-                    is_flagged: false,
-                    cves: [],
-                    first_seen: "",
-                    last_seen: "",
-                  },
-                ]
-            ).map((device) => (
-              <motion.div
-                key={device.mac}
-                layout
-                className="rounded-xl border border-[color:var(--border-soft)] bg-[color:var(--bg-panel)] p-3"
+        <section className="mx-auto max-w-[1240px] px-4 pb-12 sm:px-6 lg:px-8">
+          <h2 className="text-2xl font-semibold tracking-tight">Core capabilities</h2>
+          <p className="mt-2 max-w-2xl text-sm text-[color:var(--text-secondary)]">
+            Built for high-stakes environments where speed, visibility, and confidence matter.
+          </p>
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {featureCards.map((feature) => (
+              <motion.article
+                key={feature.title}
+                whileHover={{ y: -2 }}
+                className="rounded-xl border border-white/10 bg-[color:var(--bg-card)] p-4"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">{device.hostname || device.ip}</p>
-                    <p className="text-xs text-[color:var(--text-ghost)]">{device.ip}</p>
-                  </div>
-                  <Badge variant={device.risk_score >= 70 ? "critical" : device.risk_score >= 40 ? "warning" : "success"}>
-                    {Math.round(device.risk_score)}
-                  </Badge>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setIsolated((prev) => new Set(prev).add(device.mac));
-                    }}
-                  >
-                    {isolated.has(device.mac) ? "Isolated" : "Isolate"}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => {
-                      setBlockedIps((prev) => new Set(prev).add(device.ip));
-                    }}
-                  >
-                    {blockedIps.has(device.ip) ? "Blocked" : "Block IP"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const node = topology?.nodes.find((n) => n.id === device.mac || n.ip === device.ip);
-                      if (node) setSelectedDevice(node);
-                    }}
-                  >
-                    Details
-                  </Button>
-                </div>
-              </motion.div>
+                <Badge variant="default"><feature.icon className="h-3.5 w-3.5" /></Badge>
+                <h3 className="mt-3 text-base font-medium">{feature.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--text-secondary)]">{feature.description}</p>
+              </motion.article>
             ))}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </section>
 
-      {selectedDevice && (
-        <div className="fixed right-0 top-16 bottom-0 z-50 shadow-2xl">
-          <DeviceDetailPanel device={selectedDevice} onClose={() => setSelectedDevice(null)} />
-        </div>
-      )}
+        <section className="mx-auto max-w-[1240px] px-4 pb-14 sm:px-6 lg:px-8">
+          <div className="rounded-2xl border border-white/10 bg-[color:var(--bg-card)] p-6">
+            <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              {steps.map((step, index) => (
+                <div key={step.title} className="rounded-xl border border-white/10 bg-[color:var(--bg-panel)] p-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-ghost)]">Step {index + 1}</p>
+                  <h3 className="mt-2 text-lg font-medium">{step.title}</h3>
+                  <p className="mt-2 text-sm text-[color:var(--text-secondary)]">{step.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
-      {loading && (
-        <div className="fixed bottom-6 right-6">
-          <Badge variant="default">Refreshing telemetry...</Badge>
-        </div>
-      )}
+        <section className="mx-auto max-w-[1240px] px-4 pb-20 sm:px-6 lg:px-8">
+          <div className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-[color:var(--status-info)]/25 bg-[linear-gradient(120deg,rgba(42,216,255,0.1),rgba(13,20,32,0.96))] p-6 sm:flex-row sm:items-center">
+            <div>
+              <h2 className="text-2xl font-semibold">Start Securing Your Network</h2>
+              <p className="mt-2 text-sm text-[color:var(--text-secondary)]">
+                Launch Shards and move from passive monitoring to proactive defense.
+              </p>
+            </div>
+            <Button size="lg" onClick={() => router.push("/auth")}>
+              Start Securing Your Network
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
 
-function MetricCard({
-  title,
+function PreviewStat({
+  label,
   value,
-  description,
-  icon: Icon,
-  accent,
+  tone,
 }: {
-  title: string;
+  label: string;
   value: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  accent: "critical" | "warning" | "success" | "default";
+  tone: "critical" | "warning" | "success";
 }) {
-  const badgeVariant = accent === "default" ? "default" : accent;
-
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardDescription>{title}</CardDescription>
-          <Badge variant={badgeVariant}><Icon className="h-3.5 w-3.5" /></Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <p className="text-3xl font-semibold tracking-tight">{value}</p>
-        <p className="mt-1 text-xs text-[color:var(--text-ghost)]">{description}</p>
-      </CardContent>
-    </Card>
+    <div className="rounded-xl border border-white/10 bg-[#0a1220] p-3">
+      <p className="text-xs uppercase tracking-[0.14em] text-[color:var(--text-ghost)]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+      <div className="mt-2">
+        <Badge variant={tone}>{tone}</Badge>
+      </div>
+    </div>
   );
 }
 
-function ActionTile({
-  title,
-  value,
-  helper,
-  tone,
-  actionLabel,
-  onAction,
-}: {
-  title: string;
-  value: number;
-  helper: string;
-  tone: "critical" | "warning" | "success";
-  actionLabel: string;
-  onAction: () => void;
-}) {
+function PreviewEvent({ severity, text }: { severity: "critical" | "warning" | "success"; text: string }) {
   return (
-    <div className="rounded-xl border border-[color:var(--border-soft)] bg-[color:var(--bg-panel)] p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--text-ghost)]">{title}</p>
-        <Badge variant={tone}>{value}</Badge>
-      </div>
-      <p className="mt-2 text-sm text-[color:var(--text-secondary)]">{helper}</p>
-      <Button variant="ghost" size="sm" className="mt-2" onClick={onAction}>
-        {actionLabel}
-      </Button>
+    <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
+      <span className="text-xs text-[color:var(--text-secondary)]">{text}</span>
+      <Badge variant={severity}>{severity}</Badge>
     </div>
   );
 }
