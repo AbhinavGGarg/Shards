@@ -91,10 +91,10 @@ export function AppHeader() {
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [actionLoading, setActionLoading] = React.useState(false);
-  const [operatorTag, setOperatorTag] = React.useState("FR");
+  const [operatorTag, setOperatorTag] = React.useState("SH");
 
   const [settings, setSettings] = React.useState<HeaderSettings>({
-    workspaceName: "Fragments SOC",
+    workspaceName: "Shards SOC",
     timezone: "America/Los_Angeles",
     criticalEmail: true,
     dailyDigest: true,
@@ -131,8 +131,16 @@ export function AppHeader() {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (!stored) return;
       const parsed = JSON.parse(stored) as HeaderSettings;
-      setSettings(parsed);
-      setDraftSettings(parsed);
+      const normalized: HeaderSettings = {
+        ...parsed,
+        workspaceName:
+          parsed.workspaceName?.trim().toLowerCase() === "fragments soc"
+            ? "Shards SOC"
+            : parsed.workspaceName,
+      };
+      setSettings(normalized);
+      setDraftSettings(normalized);
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalized));
     } catch {
       // ignore invalid storage
     }
@@ -150,7 +158,7 @@ export function AppHeader() {
   }, [statusMessage]);
 
   const unreadCount = notifications.filter((notification) => !notification.read).length;
-  const pageTitle = pageTitles[pathname] ?? "Fragments Platform";
+  const pageTitle = pageTitles[pathname] ?? "Shards Platform";
   const action = React.useMemo(() => contextActionForPath(pathname), [pathname]);
 
   const runPrimaryAction = React.useCallback(async () => {

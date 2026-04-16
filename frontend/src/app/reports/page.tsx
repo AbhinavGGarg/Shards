@@ -61,7 +61,7 @@ export default function ReportsPage() {
   const [alerts, setAlerts] = React.useState<Alert[]>([]);
   const [activeStep, setActiveStep] = React.useState<ReportStep>("overview");
   const [config, setConfig] = React.useState<ReportConfig>({
-    title: "Fragments Incident Review",
+    title: "Shards Incident Review",
     audience: "executive",
     timeframe: "7d",
     includeTopology: true,

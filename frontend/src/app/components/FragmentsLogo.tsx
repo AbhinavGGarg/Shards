@@ -61,7 +61,7 @@ export default function FragmentsLogo({
             color: titleColor,
           }}
         >
-          Fragments
+          Shards
         </span>
         <span
           style={{

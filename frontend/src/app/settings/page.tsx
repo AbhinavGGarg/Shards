@@ -23,7 +23,7 @@ type WorkspaceSettings = {
 };
 
 const defaultSettings: WorkspaceSettings = {
-  workspaceName: "Fragments SOC",
+  workspaceName: "Shards SOC",
   defaultEnvironment: "Production",
   dailyDigest: true,
   criticalEmail: true,
@@ -42,7 +42,15 @@ export default function SettingsPage() {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (!stored) return;
       const parsed = JSON.parse(stored) as WorkspaceSettings;
-      setSettings(parsed);
+      const normalized: WorkspaceSettings = {
+        ...parsed,
+        workspaceName:
+          parsed.workspaceName?.trim().toLowerCase() === "fragments soc"
+            ? "Shards SOC"
+            : parsed.workspaceName,
+      };
+      setSettings(normalized);
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalized));
     } catch {
       // ignore invalid local storage
     }

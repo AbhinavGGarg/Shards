@@ -3,7 +3,7 @@ import "./globals.css";
 import { AppShell } from "@/components/app/app-shell";
 
 export const metadata: Metadata = {
-  title: "Fragments — Network Security Platform",
+  title: "Shards — Network Security Platform",
   description: "AI-powered cybersecurity SaaS operations platform",
 };
 

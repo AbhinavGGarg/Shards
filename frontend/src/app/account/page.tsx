@@ -28,7 +28,7 @@ type Session = {
 export default function AccountPage() {
   const [profile, setProfile] = React.useState<AccountProfile>({
     name: "Abhinav Garg",
-    email: "analyst@fragments.local",
+    email: "analyst@shards.local",
     role: "owner",
     timezone: "America/Los_Angeles",
   });

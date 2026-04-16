@@ -71,7 +71,7 @@ export default function TopBar() {
           }}
           title="Profile"
         >
-          FR
+          SH
         </button>
       </div>
     </header>
