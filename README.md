@@ -1,6 +1,5 @@
 # Shards
 
-![Shards Cyber Defense](./frontend/public/shards-logo-wordmark.svg)
 
 **AI-powered network security and threat intelligence platform**.
 Shards helps teams discover devices, score risk, monitor threats, simulate lateral movement, assess compliance, and generate security reports.
